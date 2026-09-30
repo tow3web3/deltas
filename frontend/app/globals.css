@@ -1,0 +1,251 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  @apply min-h-screen bg-ground text-ink antialiased;
+  background-image: radial-gradient(1000px circle at 50% -20%, rgba(47, 168, 255, 0.09), transparent 60%);
+  background-attachment: fixed;
+  color-scheme: dark;
+}
+
+@layer components {
+  .panel {
+    @apply rounded-2xl border border-line bg-paper;
+    background-image: linear-gradient(180deg, rgba(255, 255, 255, 0.028), rgba(255, 255, 255, 0) 38%);
+  }
+  /* The frame of the site: a hairline box with two registration marks, top left
+     and bottom right, like the corners of a printed form. */
+  .frame {
+    @apply relative rounded-2xl border border-line bg-paper;
+    background-image: linear-gradient(180deg, rgba(255, 255, 255, 0.028), rgba(255, 255, 255, 0) 38%);
+  }
+  .frame::before,
+  .frame::after {
+    content: '';
+    position: absolute;
+    width: 9px;
+    height: 9px;
+    pointer-events: none;
+    border-color: #2FA8FF;
+    border-style: solid;
+    opacity: 0.85;
+  }
+  .frame::before { top: -1px; left: -1px; border-width: 1px 0 0 1px; border-top-left-radius: 10px; }
+  .frame::after { bottom: -1px; right: -1px; border-width: 0 1px 1px 0; border-bottom-right-radius: 10px; }
+  /* Small caps label set in mono: the voice of every caption on the site. */
+  .label {
+    @apply font-mono text-[10.5px] font-medium uppercase tracking-[0.14em] text-mut;
+  }
+  .panel-glow {
+    @apply rounded-2xl border border-hood-200 bg-paper shadow-glow;
+  }
+  .panel-gold {
+    @apply rounded-2xl border border-gold-200 bg-paper shadow-gold;
+  }
+  .panel-ink {
+    @apply rounded-2xl border border-line bg-slab text-white;
+  }
+
+  /* Primary CTA: solid route green, dark text */
+  .btn-primary {
+    @apply inline-flex items-center justify-center gap-2 rounded-xl bg-hood-500 px-5 py-2.5
+           text-sm font-bold text-coal;
+    transition: background-color 0.18s ease, transform 0.12s ease, box-shadow 0.18s ease;
+  }
+  .btn-primary:hover {
+    @apply -translate-y-px bg-hood-400;
+    box-shadow: 0 8px 24px rgba(47, 168, 255, 0.3);
+  }
+  .btn-primary:active {
+    @apply translate-y-0;
+  }
+  .btn-primary:disabled {
+    @apply cursor-not-allowed opacity-60;
+  }
+
+  .btn-ghost {
+    @apply inline-flex items-center justify-center gap-2 rounded-xl border border-line bg-paper
+           px-5 py-2.5 text-sm font-semibold text-ink;
+    transition: border-color 0.18s ease, color 0.18s ease, transform 0.12s ease;
+  }
+  .btn-ghost:hover {
+    @apply -translate-y-px border-hood-400 text-hood-700;
+  }
+
+  /* Secondary CTA: white pill, the loudest thing after the accent */
+  .btn-ink {
+    @apply inline-flex items-center justify-center gap-2 rounded-xl bg-ink px-5 py-2.5 text-sm font-bold text-coal;
+    transition: transform 0.12s ease, background-color 0.18s ease;
+  }
+  .btn-ink:hover {
+    @apply -translate-y-px bg-white;
+  }
+
+  .chip {
+    @apply inline-flex items-center gap-2 rounded-full border border-line bg-paper px-3 py-1 text-xs font-medium text-mut;
+  }
+  .chip-gold {
+    @apply inline-flex items-center gap-2 rounded-full border border-gold-300 bg-gold-50 px-3 py-1 text-xs font-bold text-gold-700;
+  }
+
+  .eyebrow {
+    @apply inline-flex items-center gap-2 font-mono text-[11px] font-medium uppercase tracking-[0.18em] text-hood-600;
+  }
+  .eyebrow::before {
+    content: '';
+    width: 14px;
+    height: 1px;
+    background: currentColor;
+  }
+
+  /* Figures: the display face with tabular digits, so numbers line up without looking like code */
+  .figure {
+    @apply font-display tabular-nums;
+    font-feature-settings: 'tnum' 1, 'zero' 0;
+    letter-spacing: -0.01em;
+  }
+  .up {
+    @apply text-hood-600;
+  }
+  .dn {
+    @apply text-down;
+  }
+
+  .card-fun {
+    @apply transition-all duration-300;
+  }
+  .card-fun:hover {
+    @apply -translate-y-1.5;
+  }
+
+  /* Stock logo tile: white disc with a hairline, so brand logos keep their own colours */
+  .stock-logo {
+    @apply flex shrink-0 items-center justify-center overflow-hidden rounded-full border border-line bg-white;
+  }
+}
+
+.text-gradient {
+  background: linear-gradient(100deg, #2FA8FF, #7FD0FF 55%, #DDF3FF);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  /* One inline-block per word: the padding below the baseline is a real box in every browser, so the y of policy keeps its tail. The negative margin gives the height back. */
+  display: inline-block;
+  padding-bottom: 0.18em;
+  margin-bottom: -0.18em;
+}
+.text-gold-gradient {
+  background: linear-gradient(100deg, #C9931B, #F6C343 55%, #FFE38A);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  padding-bottom: 0.18em;
+}
+
+/* Logos orbiting a centre */
+.orbit {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  margin: -1.5rem 0 0 -1.5rem;
+  animation: orbit var(--dur, 22s) linear infinite;
+  animation-delay: var(--delay, 0s);
+}
+.orbit:hover { animation-play-state: paused; }
+
+@keyframes reveal-pop {
+  0% { opacity: 0; transform: translateY(10px) scale(0.98); }
+  100% { opacity: 1; transform: none; }
+}
+.reveal-pop { animation: reveal-pop 0.5s ease-out both; }
+
+/* Ticker tape */
+@keyframes marquee {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
+}
+.marquee-track {
+  display: flex;
+  width: max-content;
+  animation: marquee 48s linear infinite;
+  will-change: transform;
+}
+.marquee-track:hover { animation-play-state: paused; }
+
+/* Dividend statement lines writing themselves in */
+@keyframes lineIn {
+  from { opacity: 0; transform: translateX(-8px); }
+  to { opacity: 1; transform: none; }
+}
+.line-in { animation: lineIn 0.5s ease-out both; }
+
+@keyframes feedIn { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
+.animate-feedin { animation: feedIn 0.4s ease-out; }
+
+.reveal { opacity: 0; transform: translateY(18px); transition: opacity 0.6s ease, transform 0.6s cubic-bezier(0.2, 0.7, 0.2, 1); }
+.reveal.is-visible { opacity: 1; transform: none; }
+
+@media (prefers-reduced-motion: reduce) {
+  .orbit, .marquee-track, .line-in { animation: none; }
+  .reveal { opacity: 1; transform: none; transition: none; }
+}
+
+::-webkit-scrollbar { width: 10px; }
+::-webkit-scrollbar-track { @apply bg-ground; }
+::-webkit-scrollbar-thumb { @apply rounded-full bg-line; }
+::-webkit-scrollbar-thumb:hover { @apply bg-hood-400; }
+
+/* Sneak peek scenes */
+@keyframes peek-dash { to { stroke-dashoffset: -64; } }
+.peek-dash { animation: peek-dash 2.4s linear infinite; }
+@keyframes peek-fill { 0%, 100% { opacity: 0.25; transform: scaleY(0.4); } 50% { opacity: 1; transform: scaleY(1); } }
+.peek-fill { transform-box: fill-box; transform-origin: bottom; animation: peek-fill 2.6s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) {
+  .peek-dash, .peek-fill { animation: none; }
+}
+
+/* Policy option scenes: SMIL cannot read prefers-reduced-motion, so pause them there. */
+@media (prefers-reduced-motion: reduce) {
+  .mode-stage svg * { animation: none !important; }
+}
+
+/* Studio canvas */
+.bm-flow { animation: peek-dash 1.6s linear infinite; }
+.react-flow__node { cursor: grab; }
+.react-flow__node.dragging { cursor: grabbing; }
+.react-flow__controls { box-shadow: none !important; border: 1px solid #24272B; border-radius: 12px; overflow: hidden; }
+.react-flow__controls-button { border-bottom: 1px solid #24272B !important; background: #101112 !important; fill: #F4F5F4 !important; }
+.react-flow__controls-button:hover { background: #191B1D !important; }
+.react-flow__handle { pointer-events: none; }
+@media (prefers-reduced-motion: reduce) { .bm-flow { animation: none; } }
+
+/* Studio nodes: promote to their own layer so images do not repaint while dragging */
+.react-flow__node { will-change: transform; }
+.react-flow__node img { backface-visibility: hidden; transform: translateZ(0); }
+
+/* Stock bubbles: a slow float so the wall feels alive */
+@keyframes bubble-float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-3px); } }
+.bubble { animation: bubble-float 4s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) { .bubble { animation: none; } }
+
+/* Running badge: three little bars that keep moving while cycles fire. */
+.run-bars i { display: block; width: 2px; height: 4px; border-radius: 1px; background: currentColor; animation: run-bar 0.9s ease-in-out infinite; }
+.run-bars i:nth-child(2) { animation-delay: 0.15s; }
+.run-bars i:nth-child(3) { animation-delay: 0.3s; }
+@keyframes run-bar { 0%, 100% { height: 3px; opacity: 0.6; } 50% { height: 9px; opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .run-bars i { animation: none; height: 6px; } }
+
+/* Route map: payments travelling along the routes */
+@keyframes route-dash { to { stroke-dashoffset: -48; } }
+.route-dash { stroke-dasharray: 4 12; animation: route-dash 1.8s linear infinite; }
+@media (prefers-reduced-motion: reduce) { .route-dash { animation: none; } }
+
+::selection { background: rgba(47, 168, 255, 0.3); }
+
+/* Dashboard, sample policy bar: slides in on arrival, and its button glows three times to be found. */
+@keyframes sample-in { from { opacity: 0; transform: translateY(-100%); } to { opacity: 1; transform: none; } }
+@keyframes sample-glow { 0%, 100% { box-shadow: 0 0 0 0 rgba(47, 168, 255, 0); } 50% { box-shadow: 0 0 0 7px rgba(47, 168, 255, 0.22); } }
+.sample-bar { animation: sample-in 0.5s cubic-bezier(0.16, 1, 0.3, 1) 0.15s both; }
+.sample-cta { animation: sample-glow 1.6s ease-in-out 0.8s 3; }
+@media (prefers-reduced-motion: reduce) { .sample-bar, .sample-cta { animation: none; } }

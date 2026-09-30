@@ -1,0 +1,36 @@
+{
+  "name": "delta-backend",
+  "version": "2.0.0",
+  "description": "DELTA on Robinhood Chain: routes a coin's creator fees to holders, wallets, buyback and burn, a treasury, and any page on the internet",
+  "main": "src/index.js",
+  "type": "module",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "node --watch src/index.js",
+    "migrate": "node src/db/migrate.js",
+    "test-run": "node scripts/test-run.mjs",
+    "probe": "node scripts/probe-stock.mjs"
+  },
+  "keywords": [
+    "robinhood-chain",
+    "stock-tokens",
+    "telegram",
+    "bot",
+    "airdrop",
+    "dividends"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "@solana/spl-token": "^0.4.15",
+    "@solana/web3.js": "^1.99.0",
+    "bs58": "^6.0.0",
+    "dotenv": "^16.4.0",
+    "express": "^4.18.0",
+    "libphonenumber-js": "^1.13.14",
+    "node-cron": "^3.0.3",
+    "pg": "^8.11.0",
+    "telegraf": "^4.16.0",
+    "viem": "^2.21.0"
+  }
+}

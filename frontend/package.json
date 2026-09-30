@@ -1,0 +1,32 @@
+{
+  "name": "delta-frontend",
+  "version": "2.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev -p 3001",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint"
+  },
+  "dependencies": {
+    "@phosphor-icons/react": "^2.1.10",
+    "@solana/web3.js": "^1.99.0",
+    "@xyflow/react": "^12.11.6",
+    "bs58": "^6.0.0",
+    "libphonenumber-js": "^1.13.14",
+    "motion": "^13.4.4",
+    "next": "^16.1.6",
+    "pg": "^8.11.0",
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4",
+    "recharts": "^3.7.0",
+    "sharp": "^0.34.5",
+    "tweetnacl": "^1.0.3",
+    "viem": "^2.21.0"
+  },
+  "devDependencies": {
+    "autoprefixer": "^10.4.16",
+    "postcss": "^8.4.32",
+    "tailwindcss": "^3.4.0"
+  }
+}
