@@ -9,7 +9,7 @@ import Link from 'next/link';
 import { animate, motion, useInView, useMotionValue, useTransform } from 'motion/react';
 import StockLogo from './StockLogo';
 import { Arrow } from './Icons';
-import { STOCKS, LIQUID_TICKERS, getStock } from '../lib/stocks';
+import { XSTOCKS, XSTOCKS_TOTAL, FEATURED_XSTOCKS } from '../lib/xstocks';
 
 const EASE = [0.16, 1, 0.3, 1];
 
@@ -78,7 +78,8 @@ function Line({ label, children, figure, href, cta }) {
 }
 
 // The strip of stock logos: the liquid ones first, they are the ones that get paid out most.
-const STRIP = [...LIQUID_TICKERS.slice(0, 22), ...STOCKS.map((s) => s.ticker).filter((t) => !LIQUID_TICKERS.includes(t)).slice(0, 10)];
+// The xStocks that scroll under the count: the familiar ones first.
+const STRIP = [...FEATURED_XSTOCKS, ...XSTOCKS.filter((s) => !FEATURED_XSTOCKS.includes(s)).slice(0, 17)];
 
 export default function StatsBar() {
   const ref = useRef(null);
@@ -94,7 +95,10 @@ export default function StatsBar() {
   }, []);
 
   const s = stats || { totalEthClaimed: 0, ethUsd: 0, totalExecutions: 0, activeConfigs: 0, daily: [], coins: [] };
-  const routed = (Number(s.totalEthClaimed) || 0) * (s.ethUsd || 0);
+  // Both chains, in dollars; the line below splits it back into SOL and ETH.
+  const routed = s.routedUsd ?? (Number(s.totalEthClaimed) || 0) * (s.ethUsd || 0);
+  const solRouted = Number(s.totalSolClaimed) || 0;
+  const ethRouted = Number(s.totalEthClaimed) || 0;
   const month = s.daily.reduce((a, d) => a + d.usd, 0);
   const week = s.daily.slice(-7).reduce((a, d) => a + d.cycles, 0);
   const lastCycles = s.daily.slice(-14);
@@ -112,7 +116,7 @@ export default function StatsBar() {
         <div className="mt-5 flex flex-wrap items-end gap-x-5 gap-y-1">
           <Figure value={routed} prefix="$" decimals={routed > 0 && routed < 1000 ? 2 : 0} start={start} className="text-6xl font-medium leading-[0.9] tracking-tight text-ink sm:text-7xl" />
           <div className="pb-1.5 text-sm text-mut">
-            <span className="figure text-ink">{(Number(s.totalEthClaimed) || 0).toLocaleString('en-US', { maximumFractionDigits: 3 })} ETH</span> through the routes
+            <span className="figure text-ink">{[solRouted > 0 && `${solRouted.toLocaleString('en-US', { maximumFractionDigits: 3 })} SOL`, ethRouted > 0 && `${ethRouted.toLocaleString('en-US', { maximumFractionDigits: 3 })} ETH`].filter(Boolean).join(' + ') || '0 SOL'}</span> through the routes
             <br />
             <span className="figure text-hood-600">${month.toLocaleString('en-US', { maximumFractionDigits: 0 })}</span> of it in the last 30 days
           </div>
@@ -139,10 +143,10 @@ export default function StatsBar() {
           ) : <span className="text-xs text-mut">Link yours: it takes two minutes.</span>}
         </Line>
 
-        <Line label="Stocks payable" href="/stocks" cta="all of them" figure={<Figure value={STOCKS.length} start={start} />}>
+        <Line label="xStocks payable" href="/stocks" cta="all of them" figure={<Figure value={XSTOCKS_TOTAL} start={start} />}>
           <div className="relative w-full max-w-[240px] overflow-hidden [mask-image:linear-gradient(90deg,transparent,#000_12%,#000_88%,transparent)]">
             <div className="marquee-track gap-1.5" style={{ animationDuration: '60s' }}>
-              {[...STRIP, ...STRIP].map((t, i) => <StockLogo key={`${t}-${i}`} address={getStock(t).address} size="h-6 w-6" text="text-[7px]" />)}
+              {[...STRIP, ...STRIP].map((s, i) => <StockLogo key={`${s.symbol}-${i}`} address={s.mint} meta={{ symbol: s.symbol, image: s.logo }} size="h-6 w-6" text="text-[7px]" />)}
             </div>
           </div>
         </Line>

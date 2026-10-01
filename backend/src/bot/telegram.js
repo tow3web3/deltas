@@ -91,7 +91,7 @@ export function initBot() {
       { command: 'announce', description: '📣 Post receipts in this group' },
       { command: 'burns', description: '🔥 Post every burn in this group' },
       { command: 'feed', description: '📣 Announce every new policy in this group' },
-      { command: 'stocks', description: '📈 The 195 Stock Tokens' },
+      { command: 'stocks', description: '📈 The stocks a coin can pay out' },
       { command: 'how', description: '📖 How it works' },
       { command: 'faq', description: '❓ Questions people ask' },
       { command: 'community', description: `💬 The ${BRAND} group` },

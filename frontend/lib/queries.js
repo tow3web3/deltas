@@ -14,16 +14,22 @@ export async function getGlobalStats() {
     sql`SELECT COUNT(*)::int AS count FROM users`,
     sql`SELECT COUNT(*)::int AS count FROM bot_configs WHERE is_active = true`,
     sql`SELECT COUNT(*)::int AS count FROM execution_logs WHERE status = 'success' AND holder_count > 0`,
-    sql`SELECT COALESCE(SUM(claimed_eth_wei), 0)::text AS sum FROM execution_logs WHERE status = 'success' AND holder_count > 0`,
+    // claimed_eth_wei holds the chain's own unit: wei on Robinhood Chain, lamports on Solana.
+    sql`SELECT COALESCE(SUM(claimed_eth_wei) FILTER (WHERE COALESCE(chain, 'robinhood') <> 'solana'), 0)::text AS sum,
+               COALESCE(SUM(claimed_eth_wei) FILTER (WHERE chain = 'solana'), 0)::text AS lamports
+        FROM execution_logs WHERE status = 'success' AND holder_count > 0`,
   ]);
-  return { totalUsers: u.count, activeConfigs: c.count, totalExecutions: e.count, totalEthClaimedWei: s.sum };
+  return { totalUsers: u.count, activeConfigs: c.count, totalExecutions: e.count, totalEthClaimedWei: s.sum, totalSolClaimedLamports: s.lamports };
 }
 
 /** ETH routed per day over the last `days` days, oldest first, days without a cycle included as zero. */
 export async function getDailyRouted(days = 30) {
   const sql = getSql();
   return await sql`
-    SELECT d::date AS day, COALESCE(SUM(el.claimed_eth_wei), 0)::text AS wei, COUNT(el.id)::int AS cycles
+    SELECT d::date AS day,
+           COALESCE(SUM(el.claimed_eth_wei) FILTER (WHERE COALESCE(el.chain, 'robinhood') <> 'solana'), 0)::text AS wei,
+           COALESCE(SUM(el.claimed_eth_wei) FILTER (WHERE el.chain = 'solana'), 0)::text AS lamports,
+           COUNT(el.id)::int AS cycles
     FROM generate_series((NOW() - (${days - 1} * INTERVAL '1 day'))::date, NOW()::date, INTERVAL '1 day') d
     LEFT JOIN execution_logs el ON el.execution_time::date = d::date AND el.status = 'success'
     GROUP BY d ORDER BY d`;

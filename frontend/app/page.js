@@ -19,6 +19,7 @@ import FAQ from '../components/FAQ'
 import CTA from '../components/CTA'
 import Footer from '../components/Footer'
 import Reveal from '../components/Reveal'
+import { Cut } from '../components/ui/Light'
 
 export default function Home() {
   return (
@@ -27,27 +28,30 @@ export default function Home() {
       <Navigation />
       <Hero />
 
-      <div className="mx-auto max-w-6xl space-y-24 px-5 py-24">
+      <div className="mx-auto max-w-6xl space-y-28 px-5 py-24">
         <Reveal><StatsBar /></Reveal>
         {/* The token, right under the numbers: the first thing a launch-day visitor looks for */}
         <Reveal><TokenLive /></Reveal>
-        <Reveal><Destinations /></Reveal>
-        <Reveal><TopPages /></Reveal>
         <Reveal><HowItWorks /></Reveal>
+        <Reveal><Destinations /></Reveal>
+        <Cut />
+        <Reveal><TopPages /></Reveal>
         <Why />
+        <Cut />
         <Reveal><Modes /></Reveal>
         <Reveal><Peeks /></Reveal>
-        <Reveal><TokenSearch /></Reveal>
         <Reveal><StockUniverse compact /></Reveal>
-        <div id="live" className="scroll-mt-20 grid items-start gap-8 lg:grid-cols-[0.7fr_1.3fr]">
+        <Reveal><TokenSearch /></Reveal>
+        <div id="live" className="scroll-mt-20 grid items-start gap-10 lg:grid-cols-[0.7fr_1.3fr]">
           <div>
-            <div className="eyebrow mb-2">Live</div>
-            <h2 className="font-display text-2xl font-semibold tracking-tight text-ink sm:text-3xl">Watch the payouts land</h2>
-            <p className="mt-3 text-sm leading-relaxed text-mut">Coins linking up and holders being paid, in real time.</p>
+            <div className="eyebrow mb-4">Live</div>
+            <h2 className="font-display text-[34px] font-medium leading-[1.05] tracking-[-0.03em] text-ink sm:text-[42px]">Watch the payouts land</h2>
+            <p className="mt-4 max-w-sm text-[15px] leading-relaxed text-mut">Coins linking up and holders being paid, on Solana and Robinhood Chain, as it happens.</p>
           </div>
           <Reveal><LiveFeed /></Reveal>
         </div>
         <Reveal><Screener /></Reveal>
+        <Cut />
         <Reveal><Developers /></Reveal>
         <Reveal><Security /></Reveal>
         <div id="faq" className="scroll-mt-20"><Reveal><FAQ /></Reveal></div>
