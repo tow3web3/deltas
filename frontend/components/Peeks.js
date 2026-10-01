@@ -22,7 +22,7 @@ const COIN = '$GLOW';
 const SCENES = [
   { key: 'loop', label: 'The loop', title: 'Fees in, channels out', body: `pump.fun sets a creator fee aside on every trade of your coin. Each cycle ${BRAND} collects it into the dev wallet, keeps 0.02 SOL for fees and routes the rest: holders, you, a treasury, a page, a buyback.`, where: 'The canvas', href: '/app', url: `${SITE_HOST}/app` },
   { key: 'policy', label: 'The routing', title: 'A few sliders, every destination', body: 'Move a share and the payout ratio follows. Presets for the common splits. Change it any time from the dashboard or the Telegram bot.', where: 'The dashboard', href: '/app', url: `${SITE_HOST}/app` },
-  { key: 'record', label: 'Record date', title: 'Diamond hands earn more', body: 'Weight ramps from 1x to 2x over 30 days. A wallet that sells starts again from zero. A sniper who buys right before the cycle gets nothing.', where: 'Loyalty, in the dashboard', href: '/app', url: `${SITE_HOST}/app` },
+  { key: 'record', label: 'The holders', title: 'Paid by balance, in batches', body: 'Every holder gets their share of the cycle by balance: about 18 SOL transfers fit in one transaction, so 412 holders take 23. Paid in an xStock, a share worth less than opening a token account (about 0.002 SOL) is skipped that cycle.', where: 'Each payout, on the coin page', href: '/app', url: `${SITE_HOST}/app` },
   { key: 'receipt', label: 'The receipt', title: 'Every cycle, on the record', body: 'Each cycle leaves a public receipt: what came in, what each destination got, and every transaction on Solscan. Holders find their own statement at /wallet.', where: 'Your statement', href: '/wallet', url: `${SITE_HOST}/receipt/129` },
 ];
 
@@ -169,38 +169,39 @@ function PolicyScene({ still }) {
 }
 
 /* ---------------- 3. the record date ---------------- */
+// The holders leg of the same cycle: 2.40 SOL to 412 wallets, by balance, 18 transfers per transaction.
 const WALLETS = [
-  { name: '7xKX…9fGh', days: 61, mult: 2.0, note: 'holding 61 days' },
-  { name: 'Bq3m…Tz8R', days: 15, mult: 1.5, note: 'holding 15 days' },
-  { name: 'E5wa…kP2c', days: 2, mult: 1.07, note: 'sold 2 days ago, clock reset' },
-  { name: '9wQe…3kLm', days: 0, mult: 0, note: 'bought 4 minutes ago, below the minimum hold' },
+  { name: '7xKX…9fGh', pct: 4.1, paid: '0.0984' },
+  { name: 'Bq3m…Tz8R', pct: 1.85, paid: '0.0444' },
+  { name: 'E5wa…kP2c', pct: 0.62, paid: '0.0149' },
+  { name: '9wQe…3kLm', pct: 0.04, paid: '0.00096' },
 ];
 function RecordScene() {
   return (
     <div className="mx-auto flex h-full max-w-xl flex-col justify-center">
       <Sheet>
         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-white/10 px-4 py-3">
-          <span className="flex items-center gap-2 text-[13px] font-medium text-ink"><Coin className="h-5 w-5" />{COIN} · record date · 4:00 pm ET</span>
-          <span className="label !text-[9.5px] !text-cyan-500">1x to 2x over 30 days</span>
+          <span className="flex items-center gap-2 text-[13px] font-medium text-ink"><Coin className="h-5 w-5" />{COIN} · holders · cycle 0129</span>
+          <span className="label !text-[9.5px] !text-cyan-500">by balance</span>
         </div>
-        <div className="label grid grid-cols-[88px_1fr_64px] gap-3 border-b border-white/10 px-4 py-2 !text-[9px] sm:grid-cols-[104px_1fr_70px]">
-          <span>Wallet</span><span>Held, of the 30 day ramp</span><span className="text-right">Weight</span>
+        <div className="label grid grid-cols-[88px_1fr_76px] gap-3 border-b border-white/10 px-4 py-2 !text-[9px] sm:grid-cols-[104px_1fr_84px]">
+          <span>Wallet</span><span>Share of the supply held</span><span className="text-right">Paid</span>
         </div>
         <ul className="divide-y divide-white/[0.06]">
           {WALLETS.map((w, i) => (
-            <motion.li key={w.name} initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.45, delay: 0.15 + i * 0.12, ease: EASE }} className="grid grid-cols-[88px_1fr_64px] items-center gap-3 px-4 py-3 sm:grid-cols-[104px_1fr_70px]">
+            <motion.li key={w.name} initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.45, delay: 0.15 + i * 0.12, ease: EASE }} className="grid grid-cols-[88px_1fr_76px] items-center gap-3 px-4 py-2.5 sm:grid-cols-[104px_1fr_84px]">
               <span className="font-mono text-[11.5px] text-ink/85">{w.name}</span>
               <div className="min-w-0">
                 <div className="h-1.5 rounded-full bg-white/[0.06]">
-                  <motion.div className={`beam h-full rounded-full ${w.mult >= 2 ? 'shadow-[0_0_12px_rgba(95,227,255,0.7)]' : 'opacity-70'}`} initial={{ width: 0 }} animate={{ width: `${Math.min(100, (w.days / 30) * 100)}%` }} transition={{ duration: 0.9, delay: 0.3 + i * 0.12, ease: EASE }} />
+                  <motion.div className={`beam h-full rounded-full ${i === 0 ? 'shadow-[0_0_12px_rgba(95,227,255,0.7)]' : 'opacity-70'}`} initial={{ width: 0 }} animate={{ width: `${Math.max(2, Math.min(100, (w.pct / 4.1) * 100))}%` }} transition={{ duration: 0.9, delay: 0.25 + i * 0.12, ease: EASE }} />
                 </div>
-                <div className="mt-1 truncate text-[11px] text-mut">{w.note}</div>
+                <div className="mt-1 truncate text-[11px] text-mut">{w.pct}% of the supply</div>
               </div>
-              <span className={`figure text-right text-sm font-medium ${w.mult === 0 ? 'text-down' : w.mult >= 2 ? 'text-cyan-500' : 'text-ink'}`}>{w.mult === 0 ? 'skipped' : `${w.mult.toFixed(2)}x`}</span>
+              <span className="figure flex items-center justify-end gap-1 text-right text-sm font-medium text-ink"><Sol size="h-3.5 w-3.5" />{w.paid}</span>
             </motion.li>
           ))}
         </ul>
-        <p className="border-t border-white/10 bg-white/[0.02] px-4 py-2.5 text-xs text-mut">Weight = balance × multiplier. Votes follow the same rule.</p>
+        <p className="border-t border-white/10 bg-white/[0.02] px-4 py-2.5 text-xs text-mut">2.40 SOL to 412 wallets in 23 transactions, each on Solscan.</p>
       </Sheet>
     </div>
   );
