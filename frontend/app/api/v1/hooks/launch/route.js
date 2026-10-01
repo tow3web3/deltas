@@ -1,5 +1,5 @@
 // Launchpad hook. POST (Bearer <apiKey>) with a token address: returns a
-// Telegram deep link that prefills the creator's DELTA setup, plus the
+// Telegram deep link that prefills the creator's DELTAS setup, plus the
 // dashboard and badge URLs the launchpad can show immediately.
 import { parseAbi } from 'viem';
 import { getSql } from '../../../../../lib/db';

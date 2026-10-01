@@ -12,7 +12,7 @@ export const metadata = {
   metadataBase: new URL(SITE_URL),
   ...pageMeta(),
   applicationName: BRAND,
-  keywords: ['DELTA', 'Robinhood Chain', 'creator fees', 'fee routing', 'memecoin dividends', 'stock tokens', 'buyback and burn', 'treasury', 'YouTube', 'GitHub'],
+  keywords: ['DELTAS', 'Robinhood Chain', 'creator fees', 'fee routing', 'memecoin dividends', 'stock tokens', 'buyback and burn', 'treasury', 'YouTube', 'GitHub'],
   category: 'finance',
   icons: {
     icon: [{ url: '/brand/delta-32.png?v=3', sizes: '32x32', type: 'image/png' }, { url: '/brand/delta-64.png?v=3', sizes: '64x64', type: 'image/png' }, { url: '/brand/delta-512.png?v=3', sizes: '512x512', type: 'image/png' }],

@@ -56,7 +56,7 @@ function demoEvent(id) {
     const inSol = Math.random() < 0.3;
     return {
       id, type: 'paid', demo: true, chain: 'solana',
-      sourceSymbol: TOKEN_SYMBOL, sourceLogo: '/logos/tokens/DELTA.png',
+      sourceSymbol: TOKEN_SYMBOL, sourceLogo: '/logos/tokens/DELTAS.png',
       rewardToken: inSol ? SOL_MINT : pickOne(DEMO_X).mint,
       holderCount: 8 + Math.floor(Math.random() * 90),
       claimedEth: String(Math.round((0.02 + Math.random() * 1.6) * 1e9)),
@@ -65,7 +65,7 @@ function demoEvent(id) {
   }
   return {
     id, type: 'linked', demo: true, chain: 'solana',
-    sourceSymbol: TOKEN_SYMBOL, sourceLogo: '/logos/tokens/DELTA.png',
+    sourceSymbol: TOKEN_SYMBOL, sourceLogo: '/logos/tokens/DELTAS.png',
     rewardToken: pickOne(DEMO_X).mint,
     holderCount: null, claimedEth: null,
     time,

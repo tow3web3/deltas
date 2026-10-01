@@ -1,4 +1,4 @@
-// The DELTA mark: the owner's artwork (design/delta-logo-source.png), a light D
+// The DELTAS mark: the owner's artwork (design/delta-logo-source.png), a light D
 // drawn around a delta, with a soft blue glow. delta-mark.png is the same artwork with its black
 // ground turned into transparency; the square icons (delta-64, -256, -512) keep
 // the ground for the browser tab and the share cards.
@@ -12,7 +12,7 @@ export function Mark({ className = 'h-10 w-10' }) {
 export function Wordmark({ className = 'text-lg' }) {
   return (
     <span className={`whitespace-nowrap font-display font-medium tracking-[-0.01em] text-ink ${className}`}>
-      DELTA
+      DELTAS
     </span>
   );
 }

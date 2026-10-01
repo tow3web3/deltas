@@ -2,7 +2,7 @@
 # Put the project token live on the site and in the bot, in one go.
 # Usage (from the repo root, Git Bash):
 #   bash deploy/set-token.sh <mint or 0x address> [min hold to set up a coin]
-#   bash deploy/set-token.sh <the $DELTA mint> 0
+#   bash deploy/set-token.sh <the $DELTAS mint> 0
 # What it does:
 #   1. checks the token: Jupiter for a Solana mint (a pump.fun coin), eth_call for a 0x token;
 #   2. writes it into the bot's env on the VM and restarts the bot once no cycle is running;

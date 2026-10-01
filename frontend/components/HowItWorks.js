@@ -1,7 +1,7 @@
 'use client';
 
 // How it works, drawn as the route a fee takes on Solana: a pump.fun coin's
-// trades set a creator fee aside, DELTA collects it into the dev wallet, the
+// trades set a creator fee aside, DELTAS collects it into the dev wallet, the
 // routing splits it into channels of light, every destination is paid. The
 // drawing runs across the page on the ground itself (no panel), in three
 // stretches; each step is written in glass under its stretch. On a narrow

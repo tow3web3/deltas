@@ -4,7 +4,7 @@
 // Solana: paste the key of the wallet that created the pump.fun coin (its public
 // key is derived here, in the browser), the mint, what holders receive, the
 // schedule, launch. Robinhood Chain: pick the wallet first (the connected one, or
-// a key you import), DELTA scans the chain for the tokens that wallet created or
+// a key you import), DELTAS scans the chain for the tokens that wallet created or
 // holds, you pick one, go. Everything else (routing, record date, pages) is drawn
 // on the canvas afterwards.
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react';

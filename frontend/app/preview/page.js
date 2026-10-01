@@ -7,7 +7,7 @@ import { Preview } from '../../components/preview/Preview';
 const geist = Geist({ subsets: ['latin'], variable: '--font-geist' });
 const mono = Geist_Mono({ subsets: ['latin'], variable: '--font-geist-mono' });
 
-export const metadata = { title: 'DELTA · preview', robots: { index: false, follow: false } };
+export const metadata = { title: 'DELTAS · preview', robots: { index: false, follow: false } };
 
 export default function PreviewPage() {
   return (

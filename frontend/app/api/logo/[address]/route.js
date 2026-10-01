@@ -10,7 +10,7 @@ export const dynamic = 'force-dynamic';
 const TTL = 6 * 3600 * 1000;
 const MISS_TTL = 10 * 60 * 1000;
 const cache = new Map();
-const UA = { 'User-Agent': 'Mozilla/5.0 (DELTA logo lookup)', Accept: 'application/json' };
+const UA = { 'User-Agent': 'Mozilla/5.0 (DELTAS logo lookup)', Accept: 'application/json' };
 
 async function json(url) {
   const res = await fetch(url, { headers: UA, cache: 'no-store', signal: AbortSignal.timeout(7000) });

@@ -118,7 +118,7 @@ const RULES = {
   json: [[/"(?:\\.|[^"\\])*"(?=\s*:)/, 'text-ink'], [/"(?:\\.|[^"\\])*"/, 'text-hood-700'], [/\b(?:true|false|null)\b/, 'text-violet-700'], [/-?\b\d+(?:\.\d+)?(?:e[+-]?\d+)?\b/, 'text-cyan-500'], [/^… .*$/, 'text-dim']],
   sh: [[/'[^']*'|"[^"]*"/, 'text-hood-700'], [/(?<=\s)-{1,2}[A-Za-z]+/, 'text-cyan-500'], [/\bcurl\b/, 'text-ink'], [/\\$/, 'text-dim']],
   js: [[/\/\/.*$/, 'text-dim'], [/'[^']*'|`[^`]*`/, 'text-hood-700'], [/\b(?:import|from|const|await|return|if|throw|new)\b/, 'text-violet-700'], [/\b\d+\b/, 'text-cyan-500']],
-  http: [[/^POST\b/, 'text-violet-700'], [/^X-Delta-[A-Za-z]+(?=:)/, 'text-cyan-500'], [/^[A-Za-z-]+(?=:)/, 'text-ink'], [/sha256=\S+/, 'text-hood-700'], [/#.*$/, 'text-dim']],
+  http: [[/^POST\b/, 'text-violet-700'], [/^X-Deltas-[A-Za-z]+(?=:)/, 'text-cyan-500'], [/^[A-Za-z-]+(?=:)/, 'text-ink'], [/sha256=\S+/, 'text-hood-700'], [/#.*$/, 'text-dim']],
   html: [[/"[^"]*"/, 'text-hood-700'], [/<\/?[a-z]+|\/?>/, 'text-violet-700'], [/\b[a-z]+(?==)/, 'text-cyan-500']],
 };
 function paint(text, lang) {
@@ -316,7 +316,7 @@ const HOOK = {
     { lang: 'json', text: json({ code: 'K7Q2MX4P', status: 'linked', token: RH_TOKEN, launchpad: 'your-launchpad', createdAt: '2026-09-28T18:02:11.000Z', linkedAt: '2026-09-28T18:05:40.000Z', config: { active: true, rewardMode: 'fixed', rewardToken: RH_NVDA, scheduleKind: 'closing_bell', intervalMinutes: null }, dashboardUrl: `${BASE}/${RH_TOKEN}`, badgeUrl: `${BASE}/api/badge/${RH_TOKEN}` }) },
   ],
   webhook: [
-    { lang: 'http', text: 'POST https://yoursite.com/webhooks/delta\nContent-Type: application/json\nX-Delta-Event: dividend.paid\nX-Delta-Signature: sha256=9f2c41…e07b\nUser-Agent: DELTA-Webhooks/1.0' },
+    { lang: 'http', text: 'POST https://yoursite.com/webhooks/deltas\nContent-Type: application/json\nX-Deltas-Event: dividend.paid\nX-Deltas-Signature: sha256=9f2c41…e07b\nUser-Agent: DELTAS-Webhooks/1.0' },
     { lang: 'json', text: json({ event: 'dividend.paid', sentAt: '2026-09-28T20:00:09.412Z', token: RH_TOKEN, launchCode: 'K7Q2MX4P', executionId: 1204, asset: { address: RH_NVDA, symbol: 'NVDA', amount: '60142857142857142', valueWei: '140000000000000000' }, reward: { address: RH_NVDA, symbol: 'NVDA', decimals: 18, isStock: true, mode: 'fixed', note: null }, amount: '42100000000000000', holdersPaid: 412, holdersEligible: 468, txHash: '0xc16a…af39', receiptUrl: `${BASE}/receipt/1204`, dashboardUrl: `${BASE}/${RH_TOKEN}`, badgeUrl: `${BASE}/api/badge/${RH_TOKEN}` }) },
   ],
   verify: [
@@ -329,7 +329,7 @@ const mono = (t) => <code className="font-mono text-[12.5px] text-ink">{t}</code
 const STEPS = [
   { tab: 'create', call: 'POST /api/v1/hooks/launch', title: 'Send the launch', body: <>The coin&apos;s address, plus the creator wallet and the fee source if you know them. You get back {mono('telegramUrl')}, {mono('dashboardUrl')} and {mono('badgeUrl')}.</> },
   { tab: 'status', call: 'telegramUrl', title: 'Show the link', body: 'The creator opens Telegram, sends the dev key, picks a stock and a schedule. The coin and the fee source are already filled in.' },
-  { tab: 'webhook', call: 'token.linked · dividend.paid', title: 'Receive webhooks', body: <>Every event names itself in {mono('X-Delta-Event')} and is signed with HMAC-SHA256 in {mono('X-Delta-Signature')}. Poll {mono('GET ?code=')} if you prefer.</> },
+  { tab: 'webhook', call: 'token.linked · dividend.paid', title: 'Receive webhooks', body: <>Every event names itself in {mono('X-Deltas-Event')} and is signed with HMAC-SHA256 in {mono('X-Deltas-Signature')}. Poll {mono('GET ?code=')} if you prefer.</> },
 ];
 
 function Launchpads() {

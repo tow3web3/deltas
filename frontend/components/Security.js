@@ -124,7 +124,7 @@ function Proofs() {
     {
       icon: <PlatformIcon platform="domain" className="h-5 w-5" />,
       title: 'A DNS record',
-      body: <>A TXT record on <code className="rounded-md border border-white/10 bg-white/[0.06] px-1.5 py-px font-mono text-[0.85em] text-ink">_delta.yourdomain.com</code>, which only whoever runs the domain can add.</>,
+      body: <>A TXT record on <code className="rounded-md border border-white/10 bg-white/[0.06] px-1.5 py-px font-mono text-[0.85em] text-ink">_deltas.yourdomain.com</code>, which only whoever runs the domain can add.</>,
     },
     {
       icon: <PlatformIcon platform="phone" className="h-5 w-5" />,

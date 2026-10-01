@@ -31,7 +31,7 @@ export const GUIDE = [
       ...(BOT_URL ? [{ link: BOT_URL, label: `Open @${BOT_USERNAME} on Telegram` }] : []),
       { rows: [
         ['1. The creator wallet', 'The private key of the wallet that created the coin on pump.fun, the way Phantom exports it: base58, or the JSON array. It is encrypted the moment it arrives (in Telegram, your message is deleted too).', 'key'],
-        ['2. Your coin', 'Its mint address; on pump.fun it ends in {c:pump}. DELTA checks that this wallet is the creator pump.fun pays.', 'coin'],
+        ['2. Your coin', 'Its mint address; on pump.fun it ends in {c:pump}. DELTAS checks that this wallet is the creator pump.fun pays.', 'coin'],
         ['3. Fee source', 'Set for you: the creator fees pump.fun holds for this wallet, collected into it every cycle.', 'source'],
         ['4. The reward', 'What holders receive: {s:SOL}, an xStock (type its ticker: NVDA for {s:NVDAx}, SPY for {s:SPYx}), or any mint Jupiter knows.', 'asset'],
         ['5. Schedule', 'Every 1, 2, 5, 10, 30 or 60 minutes, or once a day at the closing bell. Any schedule can be limited to market hours.', 'clock'],
@@ -76,7 +76,7 @@ export const GUIDE = [
       { link: '/claim', label: 'Go to the claim page' },
       { steps: [
         { title: 'Sign in with the platform', body: `{p:youtube|YouTube}, {p:github|GitHub}, {p:x|X}, {p:instagram|Instagram}, {p:facebook|Facebook}, {p:tiktok|TikTok} and {p:twitch|Twitch} open a sign-in on the platform itself, read only: ${BRAND} sees which pages your account runs and nothing else. The access token is dropped right after, never stored. Your pages then appear with what waits in their vault.`, p: 'youtube' },
-        { title: 'For a website, a DNS record', body: 'Type the domain and connect your wallet. The page gives you a TXT record to add on {c:_delta.<yourdomain>}. Once it spreads, usually within minutes, the domain is yours to claim.', p: 'domain' },
+        { title: 'For a website, a DNS record', body: 'Type the domain and connect your wallet. The page gives you a TXT record to add on {c:_deltas.<yourdomain>}. Once it spreads, usually within minutes, the domain is yours to claim.', p: 'domain' },
         { title: 'For a phone number, a code', body: 'Type the number with its country code and choose {p:phone|WhatsApp} or SMS. A six-digit code arrives; type it, and the number is proved. The site only ever shows the number masked, like {c:+33 • •• •• •• 78}, and a phone page has an address of its own, so no link carries the number.', p: 'phone' },
         { title: 'Connect the wallet that gets paid', body: 'Pick the chain: a Solana wallet (Phantom, Solflare, Backpack) for what Solana coins pay, a Robinhood Chain wallet (MetaMask, Rabby) for the rest. Sign the message: it says which page pays which wallet, on which chain, and nothing else. It is a signature, not a transaction.' },
         { title: 'Receive', body: 'What waited in the vault arrives within minutes. Every later cycle pays your wallet directly. To change the wallet later, sign again from the new one.' },

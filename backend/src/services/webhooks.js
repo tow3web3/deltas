@@ -1,6 +1,6 @@
 // Webhooks to launchpads. Every event is a JSON POST signed with HMAC-SHA256
 // over the raw body using the launchpad's webhook secret (header
-// X-Delta-Signature: sha256=<hex>), plus X-Delta-Event and a timestamp.
+// X-Deltas-Signature: sha256=<hex>), plus X-Deltas-Event and a timestamp.
 // Delivery is best effort with one retry; failures never affect the cycle.
 import crypto from 'crypto';
 import * as db from '../db/queries.js';
@@ -12,8 +12,8 @@ export function sign(secret, body) {
 
 async function post(launchpad, event, payload) {
   const body = JSON.stringify({ event, sentAt: new Date().toISOString(), ...payload });
-  const headers = { 'Content-Type': 'application/json', 'X-Delta-Event': event, 'User-Agent': 'DELTA-Webhooks/1.0' };
-  if (launchpad.webhook_secret) headers['X-Delta-Signature'] = sign(launchpad.webhook_secret, body);
+  const headers = { 'Content-Type': 'application/json', 'X-Deltas-Event': event, 'User-Agent': 'DELTAS-Webhooks/1.0' };
+  if (launchpad.webhook_secret) headers['X-Deltas-Signature'] = sign(launchpad.webhook_secret, body);
   let status = 0;
   let ok = false;
   for (let attempt = 0; attempt < 2 && !ok; attempt++) {

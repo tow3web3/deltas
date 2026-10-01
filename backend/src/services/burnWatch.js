@@ -1,6 +1,6 @@
 // Burn alerts: watch a token for transfers to the burn addresses (0x0 and
 // 0xdead) and post a card in every Telegram group that asked for it with
-// /burns. Any burn counts, not only the ones DELTA executes: a manual burn by
+// /burns. Any burn counts, not only the ones DELTAS executes: a manual burn by
 // the creator, a launchpad burn, a buyback bot. Total burned = tokens parked at
 // the burn addresses plus whatever left the supply since the group was bound.
 import { parseAbiItem } from 'viem';

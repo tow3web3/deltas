@@ -49,7 +49,7 @@ export const PROVIDERS = {
     authorize: 'https://github.com/login/oauth/authorize', scope: 'read:org',
     token: (p) => postForm('https://github.com/login/oauth/access_token', p),
     async identities(token) {
-      const h = { ...bearer(token), 'X-GitHub-Api-Version': '2022-11-28', 'User-Agent': 'DELTA' };
+      const h = { ...bearer(token), 'X-GitHub-Api-Version': '2022-11-28', 'User-Agent': 'DELTAS' };
       const me = await getJson('https://api.github.com/user', { headers: h });
       const out = [{ id: `u${me.id}`, handles: [me.login], name: me.name || me.login, avatar: me.avatar_url }];
       // Organisations count when the account is one of their owners.
@@ -260,11 +260,11 @@ export async function identityFor(platform, handle) {
 }
 
 /* ---------------- domains: a DNS TXT record ---------------- */
-export const DNS_PREFIX = '_delta';
+export const DNS_PREFIX = '_deltas';
 /** The code a domain owner publishes. Bound to the wallet, so a record proves "this domain pays this wallet". */
 export function domainCode(domain, wallet) {
   const mac = crypto.createHmac('sha256', secret()).update(`domain.${String(domain).toLowerCase()}.${String(wallet).toLowerCase()}`).digest('hex');
-  return `delta-verify=${mac.slice(0, 40)}`;
+  return `deltas-verify=${mac.slice(0, 40)}`;
 }
 
 export async function domainProved(domain, wallet) {

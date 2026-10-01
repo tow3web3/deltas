@@ -6,7 +6,7 @@ export const PROJECT_TOKEN = TOKEN_ON_EVM ? TOKEN_CA : '';
 export const MIN_HOLD = 100_000;
 
 export function claimMessage(wallet) {
-  return `DELTA Missions, claim rewards\nChain: Robinhood Chain (4663)\nWallet: ${wallet}`;
+  return `DELTAS Missions, claim rewards\nChain: Robinhood Chain (4663)\nWallet: ${wallet}`;
 }
 
 // `icon` is the name of an export of components/Icons.js, resolved by the component

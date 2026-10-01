@@ -1,6 +1,6 @@
 'use client';
 
-// The visual system of DELTA, in a few parts every section shares: the glass
+// The visual system of DELTAS, in a few parts every section shares: the glass
 // panel, the beam gradient, and the routing drawn as channels of light (one
 // beam entering, splitting into channels whose thickness is their share, pulses
 // travelling along them).

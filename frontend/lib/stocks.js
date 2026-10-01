@@ -80,7 +80,7 @@ export function describeAddress(address, meta = null) {
     // Last resort: the site asks the screener and the explorer for the token's icon.
     valid && !sol ? `/api/logo/${String(address).toLowerCase()}` : null,
   ].filter(Boolean))];
-  return { symbol: ours ? TOKEN_SYMBOL : meta?.symbol || short, name: meta?.name || (ours ? 'DELTA' : 'Token'), logo: logos[0] || null, logos, color: ours ? '#2FA8FF' : '#00C805', isStock: false, isNative: false };
+  return { symbol: ours ? TOKEN_SYMBOL : meta?.symbol || short, name: meta?.name || (ours ? 'DELTAS' : 'Token'), logo: logos[0] || null, logos, color: ours ? '#2FA8FF' : '#00C805', isStock: false, isNative: false };
 }
 
 export const EXPLORER = 'https://robinhoodchain.blockscout.com';

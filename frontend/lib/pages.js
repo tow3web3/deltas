@@ -167,7 +167,7 @@ export function pageName(platform, handle) {
 export const pageAvatar = (platform, handle) => (platform === 'phone' ? '/api/pages/avatar/phone/-' : `/api/pages/avatar/${platform}/${encodeURIComponent(handle)}`);
 
 /**
- * The DELTA path of a page: /p/github/your-project. A phone page is
+ * The DELTAS path of a page: /p/github/your-project. A phone page is
  * addressed by its slug (a keyed hash the server gives), never by the number.
  */
 export const pagePath = (platform, handle, slug = null) => (platform === 'phone' ? `/p/phone/${encodeURIComponent(slug || 'unknown')}` : `/p/${platform}/${encodeURIComponent(handle)}`);

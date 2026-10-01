@@ -108,7 +108,7 @@ export async function getYieldInputs(address = null) {
   return rows;
 }
 
-/** What DELTA has bought for a config's treasury, grouped by asset. */
+/** What DELTAS has bought for a config's treasury, grouped by asset. */
 export async function getTreasuryLedger(configId) {
   const sql = getSql();
   return await sql`
@@ -136,7 +136,7 @@ export async function getReceipt(id) {
   return row || null;
 }
 
-/** Everything a wallet has received across every DELTA token, plus its current holdings. */
+/** Everything a wallet has received across every DELTAS token, plus its current holdings. */
 export async function getWalletStatement(address) {
   const sql = getSql();
   const w = /^0x/.test(address) ? address.toLowerCase() : address;

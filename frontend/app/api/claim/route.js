@@ -62,7 +62,7 @@ export async function POST(request) {
     // 1. The page is theirs.
     let identity = null;
     if (platform === 'domain') {
-      if (!(await domainProved(handle, wallet))) return Response.json({ error: `The TXT record was not found on _delta.${handle}. DNS changes can take a few minutes to spread.` }, { status: 403 });
+      if (!(await domainProved(handle, wallet))) return Response.json({ error: `The TXT record was not found on _deltas.${handle}. DNS changes can take a few minutes to spread.` }, { status: 403 });
     } else {
       identity = await identityFor(platform, handle);
       if (!identity) return Response.json({ error: platform === 'phone' ? 'Prove the number with the code first' : `Sign in with ${PLATFORMS[platform].label} as the owner of ${pageName(platform, handle)} first` }, { status: 403 });

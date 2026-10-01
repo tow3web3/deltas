@@ -1,6 +1,6 @@
 'use client';
 
-// Look a coin up: does it route its fees through DELTA? Solana first (a
+// Look a coin up: does it route its fees through DELTAS? Solana first (a
 // pump.fun mint), Robinhood Chain too (a 0x address). The answer is a glass
 // card: the coin with its own logo, its routing as channels of light (one bar
 // per destination, as long as its share), what holders are paid in, the

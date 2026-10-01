@@ -1,6 +1,6 @@
 'use client';
 
-// The next look of DELTA, in one page: a deep ground lit by the logo's glow,
+// The next look of DELTAS, in one page: a deep ground lit by the logo's glow,
 // glass panels with one lit edge, Geist, and the routing drawn as light that
 // enters once and leaves in channels. Nothing here uses the old frame grammar.
 import { useEffect, useRef, useState } from 'react';
@@ -47,7 +47,7 @@ const CHANNELS = [
   { key: 'holders', label: 'Holders', sub: 'paid in SOL, by balance', share: 50, icon: 'holders' },
   { key: 'page', label: '@yourchannel', sub: 'YouTube · its own vault', share: 20, icon: 'youtube' },
   { key: 'stock', label: 'Treasury', sub: 'holds NVDAx', share: 15, icon: 'stock' },
-  { key: 'burn', label: 'Buyback and burn', sub: 'buys $DELTA, burns it', share: 10, icon: 'burn' },
+  { key: 'burn', label: 'Buyback and burn', sub: 'buys $DELTAS, burns it', share: 10, icon: 'burn' },
   { key: 'phone', label: '+33 • •• •• •• 78', sub: 'a phone number · WhatsApp', share: 5, icon: 'phone' },
 ];
 
@@ -118,7 +118,7 @@ function Nav() {
       <div className="mx-auto flex max-w-6xl items-center justify-between px-5 py-4">
         <div className="flex items-center gap-2.5">
           <Mark className="h-9 w-9" />
-          <span className="text-[17px] font-medium tracking-[-0.01em]" style={{ color: G.ink }}>DELTA</span>
+          <span className="text-[17px] font-medium tracking-[-0.01em]" style={{ color: G.ink }}>DELTAS</span>
         </div>
         <nav className="hidden items-center gap-7 text-[14px] md:flex" style={{ color: G.mut }}>
           {['Pages', 'Claim', 'Guide', 'Stocks'].map((l) => <span key={l} className="transition-colors hover:text-white">{l}</span>)}
@@ -152,7 +152,7 @@ function Hero() {
       </div>
       <Glass lit="left" className="p-5 sm:p-7">
         <div className="mb-4 flex items-center justify-between">
-          <Label>Routing · $DELTA · cycle 0129</Label>
+          <Label>Routing · $DELTAS · cycle 0129</Label>
           <span className="flex items-center gap-2 text-[11px] uppercase tracking-[0.2em]" style={{ fontFamily: MONO, color: G.cyan }}><span className="h-1.5 w-1.5 animate-pulse rounded-full" style={{ background: G.cyan, boxShadow: `0 0 10px ${G.cyan}` }} />live</span>
         </div>
         <Flow />
@@ -243,7 +243,7 @@ function Token() {
       <Glass lit="left" className="grid gap-8 p-7 sm:p-9 lg:grid-cols-[auto_1fr_auto] lg:items-center">
         <div className="flex items-center gap-5">
           <div className="relative"><Mark className="h-20 w-20" /><span aria-hidden="true" className="absolute inset-0 -z-10 rounded-full blur-2xl" style={{ background: 'rgba(47,168,255,0.35)' }} /></div>
-          <div><Label>The token</Label><div className="mt-1 text-[34px] font-medium tracking-[-0.03em]" style={{ color: G.ink }}>$DELTA</div><div className="text-[13px]" style={{ color: G.mut }}>on Solana · routes its own fees</div></div>
+          <div><Label>The token</Label><div className="mt-1 text-[34px] font-medium tracking-[-0.03em]" style={{ color: G.ink }}>$DELTAS</div><div className="text-[13px]" style={{ color: G.mut }}>on Solana · routes its own fees</div></div>
         </div>
         <div className="min-w-0">
           <Label className="mb-2">Mint address</Label>

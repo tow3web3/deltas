@@ -1,7 +1,7 @@
 'use client';
 
 // The memecoins of Robinhood Chain, live from the most traded pools, as a small
-// sortable table. Each one is a coin that can plug into DELTA today.
+// sortable table. Each one is a coin that can plug into DELTAS today.
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import StockLogo from './StockLogo';

@@ -7,7 +7,7 @@ import { chainOf, normAddress } from './chains';
 const chainLine = (wallet) => (chainOf(wallet) === 'solana' ? 'Solana' : 'Robinhood Chain (4663)');
 
 export const loginMessage = ({ wallet, nonce, issuedAt }) =>
-  `DELTA dashboard login\nChain: ${chainLine(wallet)}\nWallet: ${wallet}\nNonce: ${nonce}\nIssued: ${issuedAt}\n\nThis signature costs no gas and only proves you own this wallet.`;
+  `DELTAS dashboard login\nChain: ${chainLine(wallet)}\nWallet: ${wallet}\nNonce: ${nonce}\nIssued: ${issuedAt}\n\nThis signature costs no gas and only proves you own this wallet.`;
 
 export const revealMessage = ({ wallet, devWallet, nonce, issuedAt }) =>
-  `DELTA: reveal my dev wallet private key\nDev wallet: ${normAddress(String(devWallet))}\nSigned in as: ${normAddress(String(wallet))}\nNonce: ${nonce}\nIssued: ${issuedAt}\n\nOnly sign this on ${SITE_HOST}. Anyone holding the key controls the fees.`;
+  `DELTAS: reveal my dev wallet private key\nDev wallet: ${normAddress(String(devWallet))}\nSigned in as: ${normAddress(String(wallet))}\nNonce: ${nonce}\nIssued: ${issuedAt}\n\nOnly sign this on ${SITE_HOST}. Anyone holding the key controls the fees.`;

@@ -1,12 +1,12 @@
 <div align="center">
 
-<img src="frontend/public/brand/delta-256.png" width="120" alt="DELTA" />
+<img src="frontend/public/brand/delta-256.png" width="120" alt="DELTAS" />
 
-# DELTA
+# DELTAS
 
 ### Route your fees anywhere.
 
-**Launchpads on Robinhood Chain pay creators in real stocks. DELTA decides where those fees go.**
+**Launchpads on Robinhood Chain pay creators in real stocks. DELTAS decides where those fees go.**
 A share to holders, paid in kind. A share to wallets. Buybacks. A stock treasury with a published book value. And a share to any page on the internet: a YouTube channel, a GitHub account, a domain, an X, Instagram, TikTok or Twitch account, a Facebook page. Draw the routing on one screen, each leg with its own share and payout asset. Telegram is the remote; your community watches it happen on a live public dashboard.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
@@ -20,14 +20,14 @@ A share to holders, paid in kind. A share to wallets. Buybacks. A stock treasury
 
 ## What it does
 
-Robinhood Chain is the first chain where 195 real stocks and ETFs trade as plain ERC-20s (the official Robinhood Stock Tokens), and its launchpads pay creators their fees in those stocks. DELTA routes a coin's creator fees, every cycle:
+Robinhood Chain is the first chain where 195 real stocks and ETFs trade as plain ERC-20s (the official Robinhood Stock Tokens), and its launchpads pay creators their fees in those stocks. DELTAS routes a coin's creator fees, every cycle:
 
 1. **💰 Sweeps** the dev wallet: every stock token balance (Multicall3, all 195) and ETH above a gas reserve, plus Uniswap V3 LP fees.
 2. **🔀 Applies the routing**: a share to holders, shares to wallets (you, a partner, a DAO), a buyback and burn, a stock treasury, and shares to pages on the internet.
 3. **🎁 Pays each leg**: stock fees go out as they are, in kind. Holders are paid pro-rata, weighted by loyalty. ETH fees are converted to the stock you chose (best route across Uniswap V4, V3 and V2, fair-price guarded). A page's share goes to its vault, or straight to the owner's wallet once the page is claimed.
 4. **♻️ Repeats** on your schedule: every 1 to 60 minutes, or once a day at the closing bell.
 
-The owner of a page does not need to know about DELTA beforehand. The funds wait in the vault until they claim.
+The owner of a page does not need to know about DELTAS beforehand. The funds wait in the vault until they claim.
 
 ---
 
@@ -79,14 +79,14 @@ graph LR
 
 A creator can route a share of the fees to any page on the internet: a YouTube channel, a GitHub account, a domain, an X, Instagram, TikTok or Twitch account, a Facebook page. Pages are added as legs on the web canvas (`/app`).
 
-- **A vault per page.** Each page gets its own on-chain vault: a wallet DELTA creates for that page, with its key encrypted at rest like a dev wallet. Every cycle the page's share is sent to the vault.
+- **A vault per page.** Each page gets its own on-chain vault: a wallet DELTAS creates for that page, with its key encrypted at rest like a dev wallet. Every cycle the page's share is sent to the vault.
 - **Public profile.** Anyone can see the vault and its balance on the page's profile at `/p/<platform>/<handle>`, for example `/p/github/your-project`.
 - **Directory.** `/pages` lists the pages receiving fees.
 - **Claim.** The owner of the page claims at `/claim`: they sign in with the platform (OAuth: Google for YouTube, GitHub, X, Instagram, Facebook, TikTok, Twitch) or, for a domain, publish a DNS TXT record. Then they connect a wallet.
 - **Sweep.** The vault is swept to the wallet bound at claim time.
 - **Direct payment afterwards.** Once a page is claimed, every cycle pays the owner's wallet directly.
 
-The owner of a page does not need to know about DELTA beforehand. Funds wait in the vault until they are claimed.
+The owner of a page does not need to know about DELTAS beforehand. Funds wait in the vault until they are claimed.
 
 ### Switching platforms on
 
@@ -224,7 +224,7 @@ Deploy `contracts/DeltaDisperse.sol` on Robinhood Chain (any Solidity 0.8.20+ to
 
 ## ⚠️ Disclaimer
 
-DELTA handles real funds and private keys on Robinhood Chain mainnet. Use at your own risk: start small, use a dedicated dev wallet, keep your `MASTER_ENCRYPTION_KEY` safe, and monitor executions. Not affiliated with Robinhood Markets; Stock Tokens are issued by Robinhood, DELTA only routes them. DELTA is not affiliated with YouTube, GitHub, X, Meta, TikTok or Twitch.
+DELTAS handles real funds and private keys on Robinhood Chain mainnet. Use at your own risk: start small, use a dedicated dev wallet, keep your `MASTER_ENCRYPTION_KEY` safe, and monitor executions. Not affiliated with Robinhood Markets; Stock Tokens are issued by Robinhood, DELTAS only routes them. DELTAS is not affiliated with YouTube, GitHub, X, Meta, TikTok or Twitch.
 
 ---
 
