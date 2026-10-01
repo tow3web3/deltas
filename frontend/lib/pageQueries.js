@@ -2,6 +2,7 @@
 // received, claiming it. The encrypted vault key never leaves this file: every
 // reader goes through PUBLIC, which does not select it.
 import { getSql } from './db';
+import { HIDDEN_TOKENS } from './listing';
 import { encryptPrivateKey, generateDevWallet } from './crypto';
 import crypto from 'crypto';
 import { PLATFORMS, normalizeHandle, maskPhone } from './pages';
@@ -119,13 +120,13 @@ export async function topPages({ limit = 24, platform = null, q = null, lamportW
             COALESCE(s.coins, 0)::int AS coins
      FROM social_pages p
      LEFT JOIN (SELECT page_id, SUM(value_wei) FILTER (WHERE chain <> 'solana') AS value_wei, SUM(value_wei) FILTER (WHERE chain = 'solana') AS value_lamports, COUNT(*) AS payments, MAX(created_at) AS last_at FROM page_payouts GROUP BY page_id) t ON t.page_id = p.id
-     LEFT JOIN (SELECT l.page_id, COUNT(DISTINCT l.config_id) AS coins FROM policy_legs l JOIN bot_configs bc ON bc.id = l.config_id AND bc.legs_enabled = true WHERE l.kind = 'page' GROUP BY l.page_id) s ON s.page_id = p.id
+     LEFT JOIN (SELECT l.page_id, COUNT(DISTINCT l.config_id) AS coins FROM policy_legs l JOIN bot_configs bc ON bc.id = l.config_id AND bc.legs_enabled = true AND NOT (bc.source_token_address = ANY($5::text[])) WHERE l.kind = 'page' GROUP BY l.page_id) s ON s.page_id = p.id
      WHERE (COALESCE(t.payments, 0) > 0 OR COALESCE(s.coins, 0) > 0)
        AND ($1::text IS NULL OR p.platform = $1)
        AND ($2::text IS NULL OR (p.platform <> 'phone' AND p.handle LIKE $2) OR LOWER(COALESCE(p.display_name, '')) LIKE $2)
      ORDER BY COALESCE(t.value_wei, 0) + COALESCE(t.value_lamports, 0) * $4::numeric DESC, COALESCE(s.coins, 0) DESC, p.id DESC
      LIMIT $3`,
-    [platform && PLATFORMS[platform] ? platform : null, like, Math.min(100, Math.max(1, Number(limit) || 24)), Number(lamportWeight) > 0 ? Number(lamportWeight) : 5e7]
+    [platform && PLATFORMS[platform] ? platform : null, like, Math.min(100, Math.max(1, Number(limit) || 24)), Number(lamportWeight) > 0 ? Number(lamportWeight) : 5e7, HIDDEN_TOKENS]
   )).map(scrub);
 }
 
@@ -141,7 +142,7 @@ export async function recentPagePayouts(limit = 20) {
 export async function pagesStats() {
   const sql = getSql();
   const [r] = await sql`
-    SELECT (SELECT COUNT(*) FROM social_pages p WHERE EXISTS (SELECT 1 FROM page_payouts pp WHERE pp.page_id = p.id) OR EXISTS (SELECT 1 FROM policy_legs l WHERE l.page_id = p.id))::int AS pages,
+    SELECT (SELECT COUNT(*) FROM social_pages p WHERE EXISTS (SELECT 1 FROM page_payouts pp WHERE pp.page_id = p.id) OR EXISTS (SELECT 1 FROM policy_legs l JOIN bot_configs bc ON bc.id = l.config_id WHERE l.page_id = p.id AND NOT (bc.source_token_address = ANY(${HIDDEN_TOKENS}::text[]))))::int AS pages,
            (SELECT COUNT(*) FROM social_pages WHERE claimed_wallet IS NOT NULL OR sol_claimed_wallet IS NOT NULL)::int AS claimed,
            (SELECT COALESCE(SUM(value_wei), 0) FROM page_payouts WHERE chain <> 'solana')::text AS value_wei,
            (SELECT COALESCE(SUM(value_wei), 0) FROM page_payouts WHERE chain = 'solana')::text AS value_lamports,

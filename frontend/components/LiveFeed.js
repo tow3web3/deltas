@@ -7,7 +7,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import StockLogo from './StockLogo';
-import { describeAddress, getStock, LIQUID_TICKERS } from '../lib/stocks';
+import { describeAddress } from '../lib/stocks';
 import { getXStock } from '../lib/xstocks';
 import { CHAINS, chainOf, isSolAddress } from '../lib/chains';
 import { TOKEN_SYMBOL } from '../lib/brand';
@@ -46,8 +46,8 @@ function assetOf(address, meta, chain) {
   return { address, symbol: d.symbol, name: d.isNative ? 'Ether' : d.isStock ? d.name : '', meta };
 }
 
-// Preview stream shown until the routes have real events. Solana first: the project's coin paying in SOL or an
-// xStock. One Robinhood Chain example (an example coin there, paying in a liquid stock) now and then.
+// Preview stream shown until the routes have real events: the project's coin on Solana paying in SOL or an
+// xStock, and now and then the moment a coin links its route.
 const DEMO_X = ['NVDA', 'SPY', 'GLD', 'TSLA', 'AAPL', 'QQQ', 'MSTR', 'COIN'].map((t) => getXStock(t)).filter(Boolean);
 const pickOne = (a) => a[Math.floor(Math.random() * a.length)];
 function demoEvent(id) {
@@ -63,14 +63,11 @@ function demoEvent(id) {
       time,
     };
   }
-  const stock = getStock(pickOne(LIQUID_TICKERS));
-  const isPaid = Math.random() > 0.3;
   return {
-    id, type: isPaid ? 'paid' : 'linked', demo: true, chain: 'robinhood',
-    sourceSymbol: 'PONS', sourceLogo: '/logos/tokens/PONS.png',
-    rewardToken: stock.address,
-    holderCount: isPaid ? 8 + Math.floor(Math.random() * 60) : null,
-    claimedEth: isPaid ? `${Math.round((0.002 + Math.random() * 0.04) * 1e6)}000000000000` : null,
+    id, type: 'linked', demo: true, chain: 'solana',
+    sourceSymbol: TOKEN_SYMBOL, sourceLogo: '/logos/tokens/DELTA.png',
+    rewardToken: pickOne(DEMO_X).mint,
+    holderCount: null, claimedEth: null,
     time,
   };
 }
