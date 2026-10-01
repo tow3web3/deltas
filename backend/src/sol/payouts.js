@@ -13,26 +13,53 @@ const SPL_BATCH = 7;
 // What a new token account costs its payer, in lamports. A payout below it is not worth creating one.
 export const ATA_RENT = 2_039_280n;
 
+// The least a system account may hold: a payment that leaves a wallet below it is refused by the chain.
+export const RENT_EXEMPT_MIN = 890_880n;
+
 /**
  * Pay SOL to many recipients. distributions: [{ address, amount (lamports, bigint), holderBalance }].
- * Returns { successful, failed, totalSent, txHashes }, the same shape the EVM side uses.
+ * A recipient whose wallet would still sit below the rent minimum after the payment (an empty
+ * wallet paid a few lamports) is skipped: the chain would refuse the whole batch. A batch that
+ * still fails is retried one transfer at a time, so one bad recipient cannot hold up the others.
+ * Returns { successful, failed, skipped, totalSent, txHashes }, the same shape the EVM side uses.
  */
 export async function paySol(keypair, distributions) {
-  const results = { successful: [], failed: [], totalSent: 0n, txHashes: [] };
-  for (let i = 0; i < distributions.length; i += SOL_BATCH) {
-    const batch = distributions.slice(i, i + SOL_BATCH);
-    const ixs = batch.map((d) => SystemProgram.transfer({ fromPubkey: keypair.publicKey, toPubkey: pk(d.address), lamports: d.amount }));
+  const results = { successful: [], failed: [], skipped: [], totalSent: 0n, txHashes: [] };
+  const c = conn();
+  const infos = [];
+  for (let i = 0; i < distributions.length; i += 100) infos.push(...(await c.getMultipleAccountsInfo(distributions.slice(i, i + 100).map((d) => pk(d.address)))));
+  const ready = [];
+  distributions.forEach((d, i) => {
+    const current = BigInt(infos[i]?.lamports ?? 0);
+    if (current + d2(d.amount) < RENT_EXEMPT_MIN) results.skipped.push({ ...d, reason: 'wallet would stay below the rent minimum' });
+    else ready.push(d);
+  });
+  const waves = Math.ceil(ready.length / SOL_BATCH);
+  for (let i = 0; i < ready.length; i += SOL_BATCH) {
+    const batch = ready.slice(i, i + SOL_BATCH);
+    const n = Math.floor(i / SOL_BATCH) + 1;
     try {
-      const sig = await sendTx(ixs, [keypair], { computeUnits: 20_000 + 5_000 * batch.length, label: `SOL wave ${Math.floor(i / SOL_BATCH) + 1}` });
+      const ixs = batch.map((d) => SystemProgram.transfer({ fromPubkey: keypair.publicKey, toPubkey: pk(d.address), lamports: d.amount }));
+      const sig = await sendTx(ixs, [keypair], { computeUnits: 20_000 + 5_000 * batch.length, label: `SOL wave ${n}` });
       for (const d of batch) results.successful.push({ ...d, hash: sig });
-      results.totalSent += batch.reduce((s, d) => s + d.amount, 0n);
+      results.totalSent += batch.reduce((sum, d) => sum + d2(d.amount), 0n);
       results.txHashes.push(sig);
-      console.log(`   Wave ${Math.floor(i / SOL_BATCH) + 1}/${Math.ceil(distributions.length / SOL_BATCH)}: ${batch.length} paid (${explorerTx(sig)})`);
+      console.log(`   Wave ${n}/${waves}: ${batch.length} paid (${explorerTx(sig)})`);
     } catch (e) {
-      for (const d of batch) results.failed.push({ ...d, error: e.message });
-      console.log(`   Wave ${Math.floor(i / SOL_BATCH) + 1} failed: ${e.message.slice(0, 160)}`);
+      console.log(`   Wave ${n} failed (${e.message.slice(0, 90)}), paying its holders one by one`);
+      let ok = 0;
+      for (const d of batch) {
+        try {
+          const sig = await sendTx([SystemProgram.transfer({ fromPubkey: keypair.publicKey, toPubkey: pk(d.address), lamports: d.amount })], [keypair], { computeUnits: 20_000, label: 'SOL transfer' });
+          results.successful.push({ ...d, hash: sig }); results.totalSent += d2(d.amount); results.txHashes.push(sig); ok++;
+        } catch (e2) {
+          results.failed.push({ ...d, error: e2.message });
+        }
+      }
+      console.log(`   Wave ${n}: ${ok}/${batch.length} paid one by one`);
     }
   }
+  if (results.skipped.length) console.log(`   ${results.skipped.length} holders skipped: their wallet would stay below the rent minimum`);
   return results;
 }
 

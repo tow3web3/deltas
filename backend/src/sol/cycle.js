@@ -316,8 +316,10 @@ export async function executeSolConfig(config, { force = false } = {}) {
     const distributions = calculateDistributions(holders, toDistribute, 1n);
     console.log(`   Paying ${distributions.length} holders in ${reward.symbol}`);
     let results;
-    if (reward.isNative) results = await paySol(keypair, distributions);
-    else {
+    if (reward.isNative) {
+      results = await paySol(keypair, distributions);
+      if (results.skipped?.length) note(log, `${results.skipped.length} holders skipped: their wallet would stay below the rent minimum`);
+    } else {
       const lamportsPerRaw = swapped > 0n && toDistribute > 0n ? swapped / toDistribute : null; // how much SOL one raw unit was worth
       results = await paySpl(keypair, reward.address, reward.decimals, distributions, { lamportsPerRaw });
       if (results.skipped?.length) note(log, `${results.skipped.length} holders skipped: share below the cost of a token account`);
