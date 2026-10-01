@@ -15,9 +15,9 @@ export const metadata = {
   keywords: ['DELTA', 'Robinhood Chain', 'creator fees', 'fee routing', 'memecoin dividends', 'stock tokens', 'buyback and burn', 'treasury', 'YouTube', 'GitHub'],
   category: 'finance',
   icons: {
-    icon: [{ url: '/brand/delta-32.png', sizes: '32x32', type: 'image/png' }, { url: '/brand/delta-64.png', sizes: '64x64', type: 'image/png' }, { url: '/brand/delta-512.png', sizes: '512x512', type: 'image/png' }],
-    shortcut: '/favicon.ico',
-    apple: [{ url: '/brand/delta-256.png', sizes: '256x256', type: 'image/png' }],
+    icon: [{ url: '/brand/delta-32.png?v=3', sizes: '32x32', type: 'image/png' }, { url: '/brand/delta-64.png?v=3', sizes: '64x64', type: 'image/png' }, { url: '/brand/delta-512.png?v=3', sizes: '512x512', type: 'image/png' }],
+    shortcut: '/favicon.ico?v=3',
+    apple: [{ url: '/brand/delta-256.png?v=3', sizes: '256x256', type: 'image/png' }],
   },
   appleWebApp: { capable: true, title: BRAND, statusBarStyle: 'black-translucent' },
   formatDetection: { telephone: false, address: false, email: false },

@@ -6,7 +6,7 @@ import { BRAND, SITE_URL, X_HANDLE } from './brand';
 // The card is a file of the site. The version in the address changes when the
 // artwork does: chat apps keep a preview image for as long as its address stays
 // the same.
-export const CARD_IMAGE = { url: '/brand/delta-card.png?v=2', width: 1200, height: 630, alt: `${BRAND}: route fees, your way` };
+export const CARD_IMAGE = { url: '/brand/delta-card.png?v=3', width: 1200, height: 630, alt: `${BRAND}: route fees, your way` };
 export const HOME_TITLE = `${BRAND} · Route your coin's fees anywhere`;
 export const HOME_DESCRIPTION =
   "Route your coin's creator fees on Solana (and Robinhood Chain) to holders, a buyback, a treasury in real stocks, or any page on the internet: a YouTube channel, a GitHub repo, a phone number.";

@@ -11,8 +11,8 @@ export default function manifest() {
     background_color: '#0A0A0A',
     theme_color: '#0A0A0A',
     icons: [
-      { src: '/brand/delta-256.png', sizes: '256x256', type: 'image/png' },
-      { src: '/brand/delta-512.png', sizes: '512x512', type: 'image/png', purpose: 'any' },
+      { src: '/brand/delta-256.png?v=3', sizes: '256x256', type: 'image/png' },
+      { src: '/brand/delta-512.png?v=3', sizes: '512x512', type: 'image/png', purpose: 'any' },
     ],
   };
 }
