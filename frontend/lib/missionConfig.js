@@ -1,7 +1,8 @@
 // The project token on Robinhood Chain + the minimum holding required for missions.
-import { TOKEN_CA } from './brand';
+import { TOKEN_CA, TOKEN_ON_EVM } from './brand';
 
-export const PROJECT_TOKEN = TOKEN_CA;
+// Missions read balances on Robinhood Chain: off while the project token lives on Solana.
+export const PROJECT_TOKEN = TOKEN_ON_EVM ? TOKEN_CA : '';
 export const MIN_HOLD = 100_000;
 
 export function claimMessage(wallet) {

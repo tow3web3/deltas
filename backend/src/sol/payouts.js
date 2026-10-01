@@ -113,4 +113,15 @@ export async function splBalance(mint, owner) {
   }
 }
 
+/** What an owner holds of a mint, in whole tokens (0 when there is no account). */
+export async function splUiBalance(mint, owner) {
+  try {
+    const programId = await tokenProgramOf(mint);
+    const r = await conn().getTokenAccountBalance(ata(pk(mint), pk(owner), programId), 'confirmed');
+    return Number(r.value.uiAmountString ?? r.value.uiAmount ?? 0);
+  } catch {
+    return 0;
+  }
+}
+
 export { TOKEN_PROGRAM_ID, PublicKey };

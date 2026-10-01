@@ -18,9 +18,10 @@ import { signIn } from '../../lib/authClient';
 import { explorerAddress, explorerTx } from '../../lib/stocks';
 import { Arrow, Check, External, Refresh, Warning } from '../../components/Icons';
 import PolicyMini from '../../components/PolicyMini';
-import { TOKEN, TOKEN_CA } from '../../lib/brand';
+import { TOKEN, TOKEN_CA, TOKEN_ON_EVM } from '../../lib/brand';
 
-const CA = TOKEN_CA;
+// The lottery runs on Robinhood Chain: a Solana project token leaves it closed.
+const CA = TOKEN_ON_EVM ? TOKEN_CA : '';
 const short = (a) => (a ? `${a.slice(0, 6)}…${a.slice(-4)}` : '');
 const eth = (wei, d = 4) => (Number(wei || 0) / 1e18).toFixed(d);
 

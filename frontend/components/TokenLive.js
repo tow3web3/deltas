@@ -10,7 +10,7 @@ import PolicyMini from './PolicyMini';
 import { Mark } from './Logo';
 import { Glass, EASE } from './ui/Light';
 import { Arrow, Vote, Copy, Check, External } from './Icons';
-import { BRAND, TOKEN_CA, TOKEN_SYMBOL } from '../lib/brand';
+import { BRAND, TOKEN_CA, TOKEN_SYMBOL, TOKEN_ON_EVM } from '../lib/brand';
 import { chainOf, dexScreenerFor, explorerTokenFor, CHAINS } from '../lib/chains';
 
 const fmt = (raw, decimals = 18) => {
@@ -165,7 +165,7 @@ function Live({ data }) {
           <p className="mt-3 max-w-xl text-[15px] leading-relaxed text-mut">The coin behind the product uses the product: {data.config.scheduleLabel?.toLowerCase()}, its creator fees are routed as drawn here. Every cycle is public.</p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Link href="/lottery" className="btn-ghost whitespace-nowrap"><Vote className="h-4 w-4 text-pink-600" />Daily lottery: 0.5% of fees</Link>
+          {TOKEN_ON_EVM && <Link href="/lottery" className="btn-ghost whitespace-nowrap"><Vote className="h-4 w-4 text-pink-600" />Daily lottery: 0.5% of fees</Link>}
           <Link href={`/${TOKEN_CA}`} className="btn-primary whitespace-nowrap">Open the ${sym} page <Arrow className="h-4 w-4" /></Link>
         </div>
       </div>

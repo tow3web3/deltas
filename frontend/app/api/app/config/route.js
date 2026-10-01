@@ -6,12 +6,20 @@ import { encryptPrivateKey, isValidPrivateKey, normalizeKey, addressOf, generate
 import { reschedule, policyCreated } from '../../../../lib/internal';
 import { rpc } from '../../../../lib/evm';
 import { EVM_ADDR, getStock, ZERO } from '../../../../lib/stocks';
-import { BRAND, CONTACT_EMAIL } from '../../../../lib/brand';
+import { BRAND, CONTACT_EMAIL, TOKEN, TOKEN_CA, TOKEN_CHAIN } from '../../../../lib/brand';
 import { isSolAddress } from '../../../../lib/chains';
 import { SOL_MINT } from '../../../../lib/stocks';
 import { getXStock } from '../../../../lib/xstocks';
-import { jupiterTokens, pumpCurve } from '../../../../lib/solana';
+import { jupiterTokens, pumpCurve, splHoldings } from '../../../../lib/solana';
 import { parseSolSecret } from '../../../../lib/solKeys';
+
+// Holders-only access: with the project token live on Solana and MIN_HOLD_TO_ACTIVATE above 0,
+// the creator wallet must hold that many tokens to set up a coin. Same rule as the bot.
+const MIN_HOLD = Number(process.env.MIN_HOLD_TO_ACTIVATE || 0);
+async function heldProjectTokens(owner) {
+  const t = (await splHoldings(owner)).find((h) => h.mint === TOKEN_CA);
+  return t ? Number(t.amount) / 10 ** t.decimals : 0;
+}
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -61,6 +69,10 @@ async function createSolana(user, b) {
 
   const key = parseSolSecret(b.wallet?.privateKey);
   if (!key) return Response.json({ error: 'That is not a Solana private key. Paste it as Phantom shows it (base58), or as a JSON array.' }, { status: 400 });
+  if (TOKEN_CA && TOKEN_CHAIN === 'solana' && MIN_HOLD > 0) {
+    const held = await heldProjectTokens(key.publicKey).catch(() => 0);
+    if (held < MIN_HOLD) return Response.json({ error: `Holders-only access: the creator wallet must hold at least ${MIN_HOLD.toLocaleString('en-US')} ${TOKEN}. It holds ${Math.floor(held).toLocaleString('en-US')}.` }, { status: 403 });
+  }
 
   const targetToken = await resolveSolReward(b.reward);
   if (!targetToken) return Response.json({ error: 'Holders can be paid in SOL, an xStock (NVDA, SPY, GLD...) or a mint Jupiter knows' }, { status: 400 });

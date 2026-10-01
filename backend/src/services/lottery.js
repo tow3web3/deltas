@@ -13,7 +13,7 @@ import { decryptPrivateKey } from './encryption.js';
 import { sendAsset } from './treasury.js';
 import { SITE_URL, PROJECT_TOKEN } from '../brand.js';
 
-export const LOTTERY_TOKEN = isAddress(process.env.LOTTERY_TOKEN_ADDRESS || '') ? process.env.LOTTERY_TOKEN_ADDRESS.toLowerCase() : PROJECT_TOKEN;
+export const LOTTERY_TOKEN = isAddress(process.env.LOTTERY_TOKEN_ADDRESS || '') ? process.env.LOTTERY_TOKEN_ADDRESS.toLowerCase() : (PROJECT_TOKEN && isAddress(PROJECT_TOKEN) ? PROJECT_TOKEN : null);
 export const MIN_HOLD = Number(process.env.LOTTERY_MIN_HOLD || 1_000_000);
 export const MIN_HOURS = Number(process.env.LOTTERY_MIN_HOURS || 2);
 export const PRIZE_BPS = Number(process.env.LOTTERY_PRIZE_BPS || 50); // 0.5% of the round's creator fees

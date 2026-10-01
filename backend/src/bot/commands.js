@@ -21,7 +21,8 @@ import { loyaltyLabel } from '../services/holders.js';
 import { SPLIT_PRESETS, effectiveSplit, splitLabel } from '../services/treasury.js';
 import { legsFor, legsLabel, mdEscape } from '../services/legs.js';
 import { emitForConfig } from '../services/webhooks.js';
-import { BRAND, SITE_URL, PROJECT_TOKEN, TOKEN } from '../brand.js';
+import { BRAND, SITE_URL, PROJECT_TOKEN, PROJECT_CHAIN, TOKEN } from '../brand.js';
+import { splUiBalance } from '../sol/payouts.js';
 
 // Optional holders-only gate: the dev wallet must hold MIN_HOLD_TO_ACTIVATE of the
 // project token. Off while PROJECT_TOKEN is unset.
@@ -260,7 +261,8 @@ async function handlePrivateKeyInput(ctx, session, privateKey) {
   const publicKey = account.address;
 
   let gateLine = '';
-  if (PROJECT_TOKEN) {
+  // The gate reads the project token on Robinhood Chain; a Solana project token gates the Solana setup instead.
+  if (PROJECT_TOKEN && PROJECT_CHAIN === 'robinhood') {
     let held = 0;
     try {
       const raw = await publicClient().readContract({ address: PROJECT_TOKEN, abi: erc20Abi, functionName: 'balanceOf', args: [publicKey] });
@@ -473,10 +475,20 @@ export async function handleSetupConfirmation(ctx, confirmed) {
 
 // ---------- Solana setup ----------
 
-/** A Solana secret: the coin's creator wallet. No holders gate: the project token lives on Robinhood Chain. */
+/** A Solana secret: the coin's creator wallet. When the project token is a Solana mint, the holders-only gate applies here. */
 async function handleSolKeyInput(ctx, session, secret) {
   const kp = keypairFromSecret(secret);
   const publicKey = kp.publicKey.toBase58();
+  if (PROJECT_TOKEN && PROJECT_CHAIN === 'solana' && MIN_HOLD_TO_ACTIVATE > 0) {
+    const held = await splUiBalance(PROJECT_TOKEN, publicKey).catch(() => 0);
+    if (held < MIN_HOLD_TO_ACTIVATE) {
+      return ctx.replyWithMarkdown(
+        `🔒 *Holders-only access.*\n\nThe creator wallet must hold at least *${MIN_HOLD_TO_ACTIVATE.toLocaleString()} ${TOKEN}*.\n` +
+        `Wallet \`${publicKey.slice(0, 4)}…${publicKey.slice(-4)}\` holds *${Math.floor(held).toLocaleString()}*.\n\nBuy some and send the key again.`,
+        keyboards.cancelKeyboard()
+      );
+    }
+  }
   let balanceLine = '';
   try { balanceLine = `\n⛽ Balance: ${formatSol(await solBalance(publicKey))} SOL`; } catch { /* ignore */ }
   session.data.chain = 'solana';
@@ -846,8 +858,16 @@ export async function handleBurns(ctx) {
     if (!list.length) return ctx.reply('Send /burns first.');
     return ctx.replyWithMarkdown(burnMessage({ burnedPct: 12.3456, txHash: '0x' + 'ab'.repeat(32), amount: '1.32M', symbol: list[0].symbol, burnedNowPct: 0.1322 }), { disable_web_page_preview: true, ...(ctx.message.message_thread_id ? { message_thread_id: ctx.message.message_thread_id } : {}) });
   }
-  const token = isAddress(arg) ? arg : PROJECT_TOKEN;
+  const token = isAddress(arg) || isSolAddress(arg) ? arg : PROJECT_TOKEN;
   if (!token) return ctx.reply('Tell me which token: /burns <contract address>');
+  if (isSolAddress(token) && !isAddress(token)) {
+    // Solana: no burn watcher yet. Each cycle's receipt says what the buyback burned, so bind the receipts here.
+    const policy = await db.getBotConfigBySourceToken(token).catch(() => null);
+    if (!policy) return ctx.reply('No active policy for that coin yet. Set one up on the dashboard or with /setup first.');
+    await db.setAnnounceChat(policy.id, chat.id, ctx.message.message_thread_id || null);
+    return ctx.replyWithMarkdown(`🔥 On Solana, every burn is in the cycle receipt. *Receipts are bound here:* each cycle posts what holders got and what the buyback burned.`,
+      ctx.message.message_thread_id ? { message_thread_id: ctx.message.message_thread_id } : {});
+  }
   try {
     const info = await enableBurnAlerts({ chatId: chat.id, threadId: ctx.message.message_thread_id || null, token, enabledBy: ctx.from.id, chatTitle: chat.title });
     let receiptsLine = '';

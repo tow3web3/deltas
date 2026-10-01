@@ -28,3 +28,7 @@ export const CONTACT_EMAIL = process.env.NEXT_PUBLIC_CONTACT_EMAIL || 'hello@del
 export const TOKEN_SYMBOL = (process.env.NEXT_PUBLIC_TOKEN_SYMBOL || 'DELTA').replace(/^\$/, '');
 export const TOKEN_CA = process.env.NEXT_PUBLIC_TOKEN_CA || '';
 export const TOKEN = `$${TOKEN_SYMBOL}`;
+// Which chain the project token lives on: $DELTA is a pump.fun coin on Solana. The lottery and
+// missions run on Robinhood Chain only, so they stay off for a Solana token.
+export const TOKEN_CHAIN = !TOKEN_CA ? null : /^0x[0-9a-fA-F]{40}$/.test(TOKEN_CA) ? 'robinhood' : 'solana';
+export const TOKEN_ON_EVM = TOKEN_CHAIN === 'robinhood';

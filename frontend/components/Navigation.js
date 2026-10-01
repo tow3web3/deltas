@@ -6,7 +6,7 @@ import { AnimatePresence, motion } from 'motion/react';
 import { Arrow, X, Github } from './Icons';
 import Logo from './Logo';
 import CopyCA from './CopyCA';
-import { BRAND, X_URL, COMMUNITY_URL, GITHUB_URL, BOT_URL, BOT_USERNAME, TOKEN, TOKEN_CA } from '../lib/brand';
+import { BRAND, X_URL, COMMUNITY_URL, GITHUB_URL, BOT_URL, BOT_USERNAME, TOKEN, TOKEN_CA, TOKEN_ON_EVM } from '../lib/brand';
 
 const MAIN = [['Pages', '/pages'], ['Claim', '/claim'], ['Guide', '/guide'], ['Stocks', '/stocks']];
 const MORE = [
@@ -29,7 +29,7 @@ export default function Navigation() {
     document.addEventListener('keydown', close);
     return () => { document.removeEventListener('mousedown', close); document.removeEventListener('keydown', close); };
   }, [open]);
-  const more = [...MORE, ...(TOKEN_CA ? [[`${TOKEN} live`, `/${TOKEN_CA}`, 'The project token, routed by its own product'], ['Lottery', '/lottery', 'One holder wins a share of the fees, every day']] : [])];
+  const more = [...MORE, ...(TOKEN_CA ? [[`${TOKEN} live`, `/${TOKEN_CA}`, 'The project token, routed by its own product']] : []), ...(TOKEN_ON_EVM ? [['Lottery', '/lottery', 'One holder wins a share of the fees, every day']] : [])];
 
   return (
     <nav className="sticky top-0 z-40 border-b border-white/5 bg-ground/70 backdrop-blur-xl">
