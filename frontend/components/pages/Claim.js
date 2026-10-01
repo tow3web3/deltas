@@ -342,7 +342,7 @@ export default function Claim({ initialPlatform = null, initialHandle = '', init
             const on = k === 'domain' || Boolean(state?.platforms?.[k]);
             const mine = accounts(k);
             const owed = mine.reduce((t, p) => t + owedOf(p), 0);
-            const status = busy === `connect:${k}` ? 'opening…' : k === 'domain' ? 'DNS record' : k === 'phone' ? (on ? 'code by WhatsApp' : 'soon') : on ? 'connect' : 'soon';
+            const status = busy === `connect:${k}` ? 'opening…' : k === 'domain' ? 'DNS record' : k === 'phone' ? (on ? 'by code' : 'soon') : on ? 'connect' : 'soon';
             return (
               <button key={k} type="button" onClick={() => pick(k)} disabled={busy === `connect:${k}`}
                 className={`group relative flex min-w-0 items-center gap-2.5 overflow-hidden rounded-2xl border px-2.5 py-2.5 text-left transition disabled:opacity-60 sm:px-3 ${platform === k ? 'border-cyan-500/60 bg-white/[0.07] shadow-glow' : mine.length ? 'border-hood-400/40 bg-white/[0.04] hover:border-cyan-500/60' : 'border-white/10 bg-white/[0.025] hover:border-white/25 hover:bg-white/[0.05]'}`}>
