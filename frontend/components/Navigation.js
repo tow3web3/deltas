@@ -77,7 +77,10 @@ export default function Navigation() {
         </div>
 
         <div className="ml-auto flex items-center gap-1">
-          <span className="mr-2 hidden items-center gap-1.5 rounded-full border border-white/10 bg-white/5 px-3 py-1.5 font-mono text-[11px] text-mut xl:inline-flex">◎ Solana · RH</span>
+          <span className="mr-2 hidden items-center gap-1.5 rounded-full border border-white/10 bg-white/5 py-1.5 pl-1.5 pr-3 font-mono text-[11px] text-mut xl:inline-flex">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/sol.png" alt="" className="h-4 w-4 rounded-full" />Solana
+          </span>
           <CopyCA className="mr-2 hidden xl:inline-flex" />
           {X_URL && <a href={X_URL} target="_blank" rel="noopener noreferrer" aria-label={`${BRAND} on X`} className="hidden h-8 w-8 items-center justify-center rounded-lg text-mut transition-colors hover:text-ink sm:flex"><X className="h-[15px] w-[15px]" /></a>}
           {COMMUNITY_URL && <a href={COMMUNITY_URL} target="_blank" rel="noopener noreferrer" aria-label={`${BRAND} community on Telegram`} className="hidden h-8 w-8 items-center justify-center rounded-lg text-mut transition-colors hover:text-ink sm:flex"><Telegram className="h-4 w-4" /></a>}
