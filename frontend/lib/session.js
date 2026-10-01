@@ -3,7 +3,6 @@
 import crypto from 'crypto';
 import { cookies } from 'next/headers';
 import { getSql } from './db';
-import { SITE_HOST } from './brand';
 
 const COOKIE = 'dl_session';
 const MAX_AGE = 30 * 24 * 3600;
@@ -59,8 +58,5 @@ export async function sessionUser() {
 
 // Both messages are rebuilt here to verify what the browser signed: keep them
 // byte-identical to LOGIN_TEXT and REVEAL_TEXT in authClient.js.
-export const loginMessage = ({ wallet, nonce, issuedAt }) =>
-  `DELTA dashboard login\nChain: Robinhood Chain (4663)\nWallet: ${wallet}\nNonce: ${nonce}\nIssued: ${issuedAt}\n\nThis signature costs no gas and only proves you own this wallet.`;
-
-export const revealMessage = ({ wallet, devWallet, nonce, issuedAt }) =>
-  `DELTA: reveal my dev wallet private key\nDev wallet: ${devWallet}\nSigned in as: ${wallet}\nNonce: ${nonce}\nIssued: ${issuedAt}\n\nOnly sign this on ${SITE_HOST}. Anyone holding the key controls the fees.`;
+// The signed texts live in walletMessages.js, shared with the browser.
+export { loginMessage, revealMessage } from './walletMessages';

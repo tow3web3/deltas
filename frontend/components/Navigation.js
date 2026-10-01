@@ -13,8 +13,6 @@ const MORE = [
   ['How it works', '/#how', 'The route, from fees in to every payout'],
   ['My payouts', '/wallet', 'What a wallet received, as a statement'],
   ['Token check', '/#check', 'Does a coin route its fees here'],
-  ['Vote', '/vote', 'Holders choose the next payout asset'],
-  ['Missions', '/missions', 'Tasks and rewards for holders'],
   ['API', '/#developers', 'Public endpoints and webhooks'],
 ];
 const link = 'whitespace-nowrap rounded-lg px-2.5 py-1.5 text-[13px] font-medium text-mut transition-colors hover:text-ink';

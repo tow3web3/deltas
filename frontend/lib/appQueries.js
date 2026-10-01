@@ -4,8 +4,11 @@ import crypto from 'crypto';
 import { getSql } from './db';
 import { PLATFORMS, normalizeHandle, parsePage, pageName } from './pages';
 import { ensurePage } from './pageQueries';
+import { normAddress, isAnyAddress, isSolAddress } from './chains';
 
 const lc = (a) => (a ? String(a).toLowerCase() : null);
+// An address as stored: 0x in lower case, Solana base58 as is.
+const na = (a) => (a ? normAddress(String(a)) : null);
 
 export async function issueNonce() {
   const sql = getSql();
@@ -24,7 +27,7 @@ export async function consumeNonce(nonce) {
 
 export async function getOrCreateUserByWallet(wallet) {
   const sql = getSql();
-  const w = lc(wallet);
+  const w = na(wallet);
   const [existing] = await sql`SELECT * FROM users WHERE wallet_address = ${w}`;
   if (existing) {
     await sql`UPDATE users SET last_seen = NOW() WHERE id = ${existing.id}`;
@@ -54,12 +57,12 @@ export async function createConfig(userId, c) {
       user_id, dev_wallet_encrypted, dev_wallet_public, source_token_address, target_token_address,
       fee_source, univ3_position_ids, reward_mode, basket, schedule_kind, interval_minutes, market_hours_only,
       split_holders_bps, split_creator_bps, split_burn_bps, split_treasury_bps, creator_address, treasury_address, payout_mode,
-      loyalty_enabled, loyalty_min_hold_hours, loyalty_ramp_days, loyalty_max_bps, loyalty_sell_reset
+      loyalty_enabled, loyalty_min_hold_hours, loyalty_ramp_days, loyalty_max_bps, loyalty_sell_reset, chain
     ) VALUES (
-      ${userId}, ${JSON.stringify(c.devWalletEncrypted)}, ${lc(c.devWalletPublic)}, ${lc(c.sourceToken)}, ${lc(c.targetToken)},
+      ${userId}, ${JSON.stringify(c.devWalletEncrypted)}, ${na(c.devWalletPublic)}, ${na(c.sourceToken)}, ${na(c.targetToken)},
       ${c.feeSource || 'wallet'}, ${'[]'}, ${c.rewardMode || 'fixed'}, ${c.basket || null}, ${c.scheduleKind || 'interval'}, ${c.intervalMinutes || 5}, ${Boolean(c.marketHoursOnly)},
-      ${c.split.holders}, ${c.split.creator}, ${c.split.burn}, ${c.split.treasury}, ${lc(c.creatorAddress)}, ${lc(c.treasuryAddress)}, ${c.payoutMode || 'in_kind'},
-      ${Boolean(c.loyalty?.enabled)}, ${c.loyalty?.minHoldHours ?? 0}, ${c.loyalty?.rampDays ?? 30}, ${c.loyalty?.maxBps ?? 20000}, ${c.loyalty?.sellReset ?? true}
+      ${c.split.holders}, ${c.split.creator}, ${c.split.burn}, ${c.split.treasury}, ${na(c.creatorAddress)}, ${na(c.treasuryAddress)}, ${c.payoutMode || 'in_kind'},
+      ${Boolean(c.loyalty?.enabled)}, ${c.loyalty?.minHoldHours ?? 0}, ${c.loyalty?.rampDays ?? 30}, ${c.loyalty?.maxBps ?? 20000}, ${c.loyalty?.sellReset ?? true}, ${c.chain === 'solana' ? 'solana' : 'robinhood'}
     ) RETURNING *
   `;
   return row;
@@ -67,7 +70,7 @@ export async function createConfig(userId, c) {
 
 // Columns the dashboard may change, with validators.
 const EDITABLE = {
-  target_token_address: (v) => (/^0x[0-9a-fA-F]{40}$/.test(v) ? v.toLowerCase() : undefined),
+  target_token_address: (v) => (isAnyAddress(v) ? normAddress(v) : undefined),
   reward_mode: (v) => (['fixed', 'roulette', 'gainer', 'portfolio', 'vote'].includes(v) ? v : undefined),
   basket: (v) => (v == null ? null : ['MAG7', 'AI', 'DEGEN', 'HAVEN'].includes(v) ? v : undefined),
   schedule_kind: (v) => (['interval', 'closing_bell', 'opening_bell'].includes(v) ? v : undefined),
@@ -91,7 +94,7 @@ const EDITABLE = {
   announce_chat_id: (v) => (v == null ? null : undefined),
 };
 const bps = (v) => (Number.isInteger(Number(v)) && Number(v) >= 0 && Number(v) <= 10000 ? Number(v) : undefined);
-const addrOrNull = (v) => (v == null || v === '' ? null : /^0x[0-9a-fA-F]{40}$/.test(v) ? v.toLowerCase() : undefined);
+const addrOrNull = (v) => (v == null || v === '' ? null : isAnyAddress(v) ? normAddress(v) : undefined);
 
 /** Apply a validated partial update. Splits must sum to 10000 when any split field is present. */
 export async function updateConfig(configId, patch) {
@@ -176,8 +179,14 @@ function legPage(l) {
   return parsed;
 }
 
-/** Validate a routing table: kinds, shares summing to 100%, destinations, assets, pages. Returns clean rows. */
-export function validateLegs(input) {
+/**
+ * Validate a routing table: kinds, shares summing to 100%, destinations, assets, pages. Returns clean rows.
+ * Addresses and assets follow the coin's chain: 0x in lower case on Robinhood Chain, base58 as is on Solana.
+ */
+export function validateLegs(input, chain = 'robinhood') {
+  const sol = chain === 'solana';
+  const okAddr = (a) => (sol ? isSolAddress(a) : ADDR.test(a));
+  const where = sol ? 'a Solana address' : 'a 0x address';
   if (!Array.isArray(input) || input.length === 0) throw new Error('Route the fees somewhere: add at least one destination');
   if (input.length > 12) throw new Error('Twelve destinations at most');
   const clean = input.map((l, i) => {
@@ -186,15 +195,16 @@ export function validateLegs(input) {
     const share = Number(l.shareBps ?? l.share_bps);
     if (!Number.isInteger(share) || share < 0 || share > 10000) throw new Error('Shares must be whole basis points between 0 and 10000');
     const address = l.address ? String(l.address) : null;
-    if ((kind === 'wallet' || kind === 'treasury') && !(address && ADDR.test(address))) throw new Error(`${l.label || kind} needs a valid destination address`);
+    if ((kind === 'wallet' || kind === 'treasury') && !(address && okAddr(address))) throw new Error(`${l.label || kind} needs a valid destination: ${where}`);
     const asset = l.asset ? String(l.asset) : null;
-    if (asset && !ADDR.test(asset)) throw new Error('Payout asset must be a token address (or empty for in kind)');
+    if (asset && !okAddr(asset)) throw new Error(sol ? 'Payout asset must be SOL, an xStock or a mint (or empty for in kind)' : 'Payout asset must be a token address (or empty for in kind)');
     if (kind === 'burn' && asset) throw new Error('A buyback leg always buys your own token');
     const page = kind === 'page' ? legPage(l) : null;
     const label = l.label ? String(l.label).slice(0, 40) : page ? pageName(page.platform, page.handle).slice(0, 40) : null;
     const px = Number.isFinite(Number(l.posX ?? l.pos_x)) ? Math.round(Number(l.posX ?? l.pos_x)) : null;
     const py = Number.isFinite(Number(l.posY ?? l.pos_y)) ? Math.round(Number(l.posY ?? l.pos_y)) : null;
-    return { kind, shareBps: share, address: kind === 'wallet' || kind === 'treasury' ? address.toLowerCase() : null, asset: asset ? asset.toLowerCase() : null, label, sortOrder: i, posX: px, posY: py, page };
+    const norm = (a) => (sol ? a : a.toLowerCase());
+    return { kind, shareBps: share, address: kind === 'wallet' || kind === 'treasury' ? norm(address) : null, asset: asset ? norm(asset) : null, label, sortOrder: i, posX: px, posY: py, page };
   });
   if (clean.filter((l) => l.kind === 'holders').length > 1) throw new Error('One holders leg at most');
   const pages = clean.filter((l) => l.page).map((l) => `${l.page.platform}:${l.page.handle}`);
@@ -205,8 +215,8 @@ export function validateLegs(input) {
 }
 
 /** Replace the routing table atomically and switch the config to routing mode. */
-export async function replaceLegs(configId, input, userId = null) {
-  const legs = validateLegs(input);
+export async function replaceLegs(configId, input, userId = null, chain = 'robinhood') {
+  const legs = validateLegs(input, chain);
   // Pages are created before the transaction: a page (and its vault) outlives the
   // routing table that first mentioned it, other coins may already route to it.
   for (const l of legs) if (l.page) l.pageId = (await ensurePage(l.page.platform, l.page.handle, userId)).id;
@@ -246,6 +256,6 @@ export async function replaceLegs(configId, input, userId = null) {
 /** An active policy on this coin owned by someone else, if any. */
 export async function activeConfigForToken(token, exceptUserId = null) {
   const sql = getSql();
-  const [row] = await sql`SELECT id, user_id, dev_wallet_public FROM bot_configs WHERE source_token_address = ${lc(token)} AND is_active = true AND user_id <> ${exceptUserId ?? -1} ORDER BY id LIMIT 1`;
+  const [row] = await sql`SELECT id, user_id, dev_wallet_public FROM bot_configs WHERE source_token_address = ${na(token)} AND is_active = true AND user_id <> ${exceptUserId ?? -1} ORDER BY id LIMIT 1`;
   return row || null;
 }

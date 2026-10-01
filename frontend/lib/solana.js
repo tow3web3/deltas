@@ -1,5 +1,6 @@
 // Solana reads for the site: balances and token metadata, through the RPC in
 // SOLANA_RPC_URL (Helius) and Jupiter's free endpoints. Server only.
+import { PublicKey } from '@solana/web3.js';
 import { isSolAddress } from './chains';
 
 const RPC = process.env.SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com';
@@ -34,6 +35,21 @@ export async function splHoldings(address) {
     }
   }
   return out;
+}
+
+const PUMP_PROGRAM = '6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P';
+/**
+ * A pump.fun coin's bonding curve: whether it graduated, and the wallet its
+ * creator fees accrue to. Null when the mint is not a pump.fun coin.
+ * Layout: 8-byte discriminator, five u64, `complete` at byte 48, `creator` at 49..81.
+ */
+export async function pumpCurve(mint) {
+  if (!isSolAddress(mint)) return null;
+  const [pda] = PublicKey.findProgramAddressSync([Buffer.from('bonding-curve'), new PublicKey(mint).toBuffer()], new PublicKey(PUMP_PROGRAM));
+  const r = await rpc('getAccountInfo', [pda.toBase58(), { encoding: 'base64', commitment: 'confirmed' }]);
+  if (!r?.value) return null;
+  const data = Buffer.from(r.value.data[0], 'base64');
+  return { complete: data[48] === 1, creator: data.length >= 81 ? new PublicKey(data.subarray(49, 81)).toBase58() : null };
 }
 
 /** USD prices from Jupiter: { [mint]: usdPrice }. Cached a minute. */

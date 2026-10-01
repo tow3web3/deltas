@@ -8,6 +8,7 @@ import * as db from '../db/queries.js';
 import { legsFor, legsLabel, splitAmounts, mdEscape } from '../services/legs.js';
 import { calculateDistributions } from '../services/airdrop.js';
 import { sendNotification } from '../bot/telegram.js';
+import { announceSolCycle } from './announce.js';
 import { keypairFromEncrypted, solBalance, formatSol, explorerTx, generateSolWallet, encryptSolSecret, isSolAddress, pk } from './client.js';
 import { readBondingCurve, pendingCreatorFees, collectCreatorFeeInstructions, isPumpMint } from './pump.js';
 import { sendTx } from './client.js';
@@ -253,6 +254,7 @@ export async function executeSolConfig(config, { force = false } = {}) {
     const summary = `SOL: ${fmt(results.totalSent, reward.decimals)} ${reward.symbol} to ${results.successful.length}/${holders.length} holders` +
       (log.burnAmount > 0n ? ` · burned ${fmt(log.burnAmount, 6, 2)}` : '') + (pages.length ? ` · ${pages.join(' · ')}` : '') + (results.failed.length ? ` · ${results.failed.length} failed` : '');
     await notifyUser(config.user_id, `✅ *Cycle done*\n\n${summary}\n\n💼 Routing: ${mdEscape(routingLabel)}`);
+    await announceSolCycle({ config, logId: saved.id, reward, results, holdersTotal: holders.length, extras: [log.burnAmount > 0n ? `Burned ${fmt(log.burnAmount, 6, 2)}` : null, ...pages].filter(Boolean) });
     console.log(`   Cycle ${cycleKey} done`);
   } catch (error) {
     console.error('Cycle failed:', error);

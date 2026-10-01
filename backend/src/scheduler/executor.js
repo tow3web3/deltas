@@ -48,7 +48,7 @@ const note = (log, msg) => { log.errorMessage = [log.errorMessage, msg].filter(B
 export async function executeBotConfig(config, { force = false } = {}) {
   // Each chain has its own cycle; this file is the EVM one. "Market hours only" holds on both.
   if ((config.chain || 'robinhood') === 'solana') {
-    if (config.market_hours_only && !force && !isMarketOpen()) {
+    if (config.market_hours_only && (config.schedule_kind || 'interval') === 'interval' && !force && !isMarketOpen()) {
       console.log(`Solana cycle for ${short(config.source_token_address)} skipped: market closed (market hours only)`);
       return;
     }
@@ -63,7 +63,7 @@ export async function executeBotConfig(config, { force = false } = {}) {
   console.log(`\nCycle ${cycleKey} for ${short(config.source_token_address)} (${scheduleLabel(config)})`);
 
   try {
-    if (config.market_hours_only && !force && !isMarketOpen()) {
+    if (config.market_hours_only && (config.schedule_kind || 'interval') === 'interval' && !force && !isMarketOpen()) {
       console.log('   Market closed, cycle skipped (market hours only)');
       return;
     }

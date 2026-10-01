@@ -7,6 +7,11 @@ import { reschedule, policyCreated } from '../../../../lib/internal';
 import { rpc } from '../../../../lib/evm';
 import { EVM_ADDR, getStock, ZERO } from '../../../../lib/stocks';
 import { BRAND, CONTACT_EMAIL } from '../../../../lib/brand';
+import { isSolAddress } from '../../../../lib/chains';
+import { SOL_MINT } from '../../../../lib/stocks';
+import { getXStock } from '../../../../lib/xstocks';
+import { jupiterTokens, pumpCurve } from '../../../../lib/solana';
+import { parseSolSecret } from '../../../../lib/solKeys';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -31,6 +36,63 @@ function resolveReward(input) {
   return null;
 }
 
+/** A Solana reward: SOL, an xStock by ticker or symbol, or any mint Jupiter knows. Returns a mint or null. */
+async function resolveSolReward(input) {
+  const v = String(input || '').trim();
+  if (!v || /^\$?sol$/i.test(v) || v === SOL_MINT) return SOL_MINT;
+  const xs = getXStock(v);
+  if (xs) return xs.mint;
+  if (isSolAddress(v)) return (await jupiterTokens([v]).catch(() => ({})))[v] ? v : null;
+  return null;
+}
+
+/**
+ * A Solana coin, set up from the dashboard as the bot does it: the key of the
+ * wallet that created the coin on pump.fun (its creator fees accrue there and
+ * only it can collect them), the mint, the reward, the schedule.
+ */
+async function createSolana(user, b) {
+  const mint = String(b.sourceToken || '').trim();
+  if (!isSolAddress(mint)) return Response.json({ error: 'That is not a Solana mint address' }, { status: 400 });
+  const meta = (await jupiterTokens([mint]).catch(() => ({})))[mint];
+  if (!meta) return Response.json({ error: 'Jupiter does not know that mint yet. Check the address, or try again once the coin has traded.' }, { status: 422 });
+  const taken = await activeConfigForToken(mint, user.id);
+  if (taken) return Response.json({ error: `$${meta.symbol} already runs a ${BRAND} policy from another wallet. If you are its creator and that policy is not yours, write to ${CONTACT_EMAIL}.` }, { status: 409 });
+
+  const key = parseSolSecret(b.wallet?.privateKey);
+  if (!key) return Response.json({ error: 'That is not a Solana private key. Paste it as Phantom shows it (base58), or as a JSON array.' }, { status: 400 });
+
+  const targetToken = await resolveSolReward(b.reward);
+  if (!targetToken) return Response.json({ error: 'Holders can be paid in SOL, an xStock (NVDA, SPY, GLD...) or a mint Jupiter knows' }, { status: 400 });
+
+  const scheduleKind = ['interval', 'closing_bell'].includes(b.scheduleKind) ? b.scheduleKind : 'interval';
+  const intervalMinutes = scheduleKind === 'interval' ? ([1, 2, 5, 10, 30, 60].includes(Number(b.intervalMinutes)) ? Number(b.intervalMinutes) : 5) : 1440;
+  const curve = await pumpCurve(mint).catch(() => null);
+
+  const config = await createConfig(user.id, {
+    chain: 'solana',
+    devWalletEncrypted: encryptPrivateKey(key.secret),
+    devWalletPublic: key.publicKey,
+    sourceToken: mint,
+    targetToken,
+    feeSource: 'wallet',
+    rewardMode: 'fixed',
+    basket: null,
+    scheduleKind, intervalMinutes,
+    marketHoursOnly: Boolean(b.marketHoursOnly),
+    split: { holders: 10000, creator: 0, burn: 0, treasury: 0 },
+    creatorAddress: null, treasuryAddress: null,
+    payoutMode: targetToken === SOL_MINT ? 'in_kind' : 'convert',
+    loyalty: { enabled: false },
+  });
+  await reschedule(config.id);
+  policyCreated(config.id).catch(() => {});
+  return Response.json({
+    ok: true, configId: config.id, chain: 'solana', devWallet: key.publicKey, symbol: meta.symbol,
+    creator: { isCreator: curve?.creator ? curve.creator === key.publicKey : null, creator: curve?.creator || null, complete: curve ? curve.complete : null },
+  }, { status: 201 });
+}
+
 export async function POST(request) {
   try {
     const user = await sessionUser();
@@ -38,6 +100,7 @@ export async function POST(request) {
     if (await getConfigForUser(user.id)) return Response.json({ error: `You already have a ${BRAND} policy. Delete it first to start over.` }, { status: 409 });
 
     const b = await request.json();
+    if (b.chain === 'solana' || (isSolAddress(b.sourceToken || '') && !EVM_ADDR.test(b.sourceToken || ''))) return await createSolana(user, b);
     if (!EVM_ADDR.test(b.sourceToken || '')) return Response.json({ error: 'Token address is invalid' }, { status: 400 });
     const symbol = await tokenExists(b.sourceToken);
     if (!symbol) return Response.json({ error: 'No ERC-20 found at that address on Robinhood Chain' }, { status: 422 });
@@ -97,20 +160,33 @@ export async function PATCH(request) {
     const config = await getConfigForUser(user.id);
     if (!config) return Response.json({ error: 'No policy yet' }, { status: 404 });
     const patch = await request.json();
+    const sol = config.chain === 'solana';
+    if (sol) {
+      // What runs on Robinhood Chain only is refused when it would switch something on, and dropped otherwise.
+      const rhOnly = (patch.reward_mode !== undefined && patch.reward_mode !== 'fixed')
+        || (patch.fee_source !== undefined && patch.fee_source !== 'wallet')
+        || patch.loyalty_enabled === true;
+      if (rhOnly) return Response.json({ error: 'Rotating rewards, votes, loyalty and Uniswap fees run on Robinhood Chain only' }, { status: 400 });
+      for (const k of ['reward_mode', 'basket', 'fee_source', 'loyalty_enabled', 'loyalty_min_hold_hours', 'loyalty_ramp_days', 'loyalty_max_bps', 'loyalty_sell_reset']) delete patch[k];
+    }
     if (patch.reward !== undefined) {
-      const t = resolveReward(patch.reward);
-      if (!t) return Response.json({ error: 'Reward must be a stock ticker, ETH, or a token address' }, { status: 400 });
+      const t = sol ? await resolveSolReward(patch.reward) : resolveReward(patch.reward);
+      if (!t) return Response.json({ error: sol ? 'Holders can be paid in SOL, an xStock or a mint Jupiter knows' : 'Reward must be a stock ticker, ETH, or a token address' }, { status: 400 });
       patch.target_token_address = t;
       delete patch.reward;
     }
-    if (patch.treasury_asset && !getStock(patch.treasury_asset)) {
+    if (sol && patch.treasury_asset) {
+      const xs = getXStock(patch.treasury_asset);
+      if (!xs) return Response.json({ error: 'The treasury holds an xStock' }, { status: 400 });
+      patch.treasury_asset = xs.mint;
+    } else if (patch.treasury_asset && !getStock(patch.treasury_asset)) {
       const t = resolveReward(patch.treasury_asset);
       if (!t || t === ZERO) return Response.json({ error: 'Treasury asset must be a stock' }, { status: 400 });
       patch.treasury_asset = t;
     }
     let legs = null;
     if (patch.legs !== undefined) {
-      legs = await replaceLegs(config.id, patch.legs, user.id);
+      legs = await replaceLegs(config.id, patch.legs, user.id, sol ? 'solana' : 'robinhood');
       delete patch.legs;
     }
     const updated = Object.keys(patch).length ? await updateConfig(config.id, patch) : { ...(await getConfigForUser(user.id)) };

@@ -5,13 +5,32 @@ import { rpc } from '../../../../lib/evm';
 import { fetchTokenMeta } from '../../../../lib/tokenMeta';
 import { researchToken } from '../../../../lib/tokenResearch';
 import { EVM_ADDR, getStock, isNative } from '../../../../lib/stocks';
+import { isSolAddress } from '../../../../lib/chains';
+import { jupiterTokens, pumpCurve, SOL_MINT } from '../../../../lib/solana';
+import { getXStock } from '../../../../lib/xstocks';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 const erc20 = parseAbi(['function symbol() view returns (string)', 'function name() view returns (string)', 'function decimals() view returns (uint8)']);
 
+/** A Solana mint: Jupiter's card, whether it is an xStock, and its pump.fun creator. */
+async function solanaToken(mint, wallet) {
+  const [meta, curve] = await Promise.all([jupiterTokens([mint]).catch(() => ({})), pumpCurve(mint).catch(() => null)]);
+  const m = meta[mint];
+  if (!m) return Response.json({ error: 'Jupiter does not know that mint yet. Check the address, or try again once the coin has traded.' }, { status: 404 });
+  const xs = getXStock(mint);
+  const pump = curve ? { isPump: true, creator: curve.creator, complete: curve.complete } : null;
+  return Response.json({
+    address: mint, chain: 'solana', symbol: m.symbol, name: m.name, decimals: m.decimals, image: m.image || (xs ? xs.logo : null), marketCap: m.marketCap ?? null,
+    isStock: Boolean(xs && xs.mint === mint), isNative: mint === SOL_MINT, research: null,
+    pump, isCreator: pump?.creator && wallet ? pump.creator === wallet : null,
+  });
+}
+
 export async function GET(request) {
-  const address = new URL(request.url).searchParams.get('address') || '';
+  const sp = new URL(request.url).searchParams;
+  const address = sp.get('address') || '';
+  if (isSolAddress(address) && !EVM_ADDR.test(address)) return solanaToken(address, sp.get('wallet') || null);
   if (!EVM_ADDR.test(address)) return Response.json({ error: 'Invalid address' }, { status: 400 });
   if (isNative(address)) {
     const research = await researchToken(address);

@@ -10,6 +10,7 @@ import Footer from '../../components/Footer';
 import StockLogo from '../../components/StockLogo';
 import { Arrow, Medal } from '../../components/Icons';
 import { useWallet } from '../../lib/useWallet';
+import { useSolWallet } from '../../lib/useSolWallet';
 import { getStock } from '../../lib/stocks';
 import { isAnyAddress } from '../../lib/chains';
 import { BRAND } from '../../lib/brand';
@@ -19,7 +20,10 @@ const FORM_LINES = [null, 'NVDA', 'AAPL', 'SPY'];
 
 export default function WalletLookup() {
   const router = useRouter();
-  const wallet = useWallet();
+  // Solana first: Phantom and the like. A Robinhood Chain wallet is the second option.
+  const sol = useSolWallet();
+  const evm = useWallet();
+  const open = async (w) => { const a = w.address || (await w.connect()); if (a) go(a); else if (w.error) setErr(w.error); };
   const [q, setQ] = useState('');
   const [err, setErr] = useState(null);
 
@@ -49,8 +53,12 @@ export default function WalletLookup() {
             </form>
             <div className="mt-5 text-sm text-mut">
               or{' '}
-              <button onClick={async () => { const a = wallet.address || (await wallet.connect()); if (a) go(a); }} className="font-semibold text-hood-600 underline-offset-4 hover:underline">
-                connect your wallet
+              <button onClick={() => open(sol)} className="font-semibold text-hood-600 underline-offset-4 hover:underline">
+                connect your Solana wallet
+              </button>
+              {' '}·{' '}
+              <button onClick={() => open(evm)} className="text-mut underline-offset-4 transition-colors hover:text-ink hover:underline">
+                a Robinhood Chain wallet
               </button>
             </div>
           </div>
@@ -59,7 +67,7 @@ export default function WalletLookup() {
           <div className="frame overflow-hidden lg:col-span-5" aria-hidden="true">
             <div className="flex items-center justify-between gap-3 border-b border-line px-5 py-3.5">
               <span className="label">Statement</span>
-              <span className="truncate font-mono text-[11px] text-mut">{isAnyAddress(q.trim()) ? `${q.trim().slice(0, 6)}…${q.trim().slice(-4)}` : '0x your wallet'}</span>
+              <span className="truncate font-mono text-[11px] text-mut">{isAnyAddress(q.trim()) ? `${q.trim().slice(0, 6)}…${q.trim().slice(-4)}` : 'your wallet'}</span>
             </div>
             <div className="divide-y divide-line">
               {FORM_LINES.map((t, i) => {

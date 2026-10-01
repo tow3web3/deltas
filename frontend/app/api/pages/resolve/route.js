@@ -12,12 +12,15 @@ export async function GET(request) {
     const parsed = parsePage(sp.get('input') || '', sp.get('platform'));
     if (parsed.error) return Response.json({ error: parsed.error }, { status: 400 });
     const page = await getPage(parsed.platform, parsed.handle);
+    // A page has a vault and a claim per chain: ?chain=solana answers for Solana.
+    const sol = sp.get('chain') === 'solana';
     return Response.json({
       platform: parsed.platform, platformLabel: PLATFORMS[parsed.platform].label, handle: parsed.platform === 'phone' ? pageName('phone', parsed.handle) : parsed.handle,
       name: page?.display_name || pageName(parsed.platform, parsed.handle),
       avatar: page?.avatar_url || null,
       url: pageUrl(parsed.platform, parsed.handle), path: page ? pagePath(parsed.platform, parsed.handle, page.slug) : parsed.platform === 'phone' ? null : pagePath(parsed.platform, parsed.handle), slug: page?.slug || null,
-      exists: Boolean(page), claimed: Boolean(page?.claimed_wallet), vault: page?.vault_address || null,
+      exists: Boolean(page), chain: sol ? 'solana' : 'robinhood',
+      claimed: Boolean(sol ? page?.sol_claimed_wallet : page?.claimed_wallet), vault: (sol ? page?.sol_vault_address : page?.vault_address) || null,
     });
   } catch (error) {
     return Response.json({ error: error.message }, { status: 500 });

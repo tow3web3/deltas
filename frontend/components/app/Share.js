@@ -5,6 +5,7 @@
 import { useEffect, useState } from 'react';
 import { Copy, Check, X, Telegram, External } from '../Icons';
 import { SITE_URL } from '../../lib/brand';
+import { chainOf } from '../../lib/chains';
 
 const origin = () => (typeof window !== 'undefined' ? window.location.origin : SITE_URL).replace(/\/$/, '');
 
@@ -20,7 +21,9 @@ export default function SharePanel({ address, symbol, compact = false }) {
   useEffect(() => { setUrl(publicPageUrl(address)); }, [address]);
 
   const sym = symbol ? `$${symbol}` : 'This coin';
-  const text = `${sym} routes its creator fees in public on Robinhood Chain. Every cycle, every route, every wallet paid: all here`;
+  const text = chainOf(address) === 'robinhood'
+    ? `${sym} routes its creator fees in public on Robinhood Chain. Every cycle, every route, every wallet paid: all here`
+    : `${sym} routes its pump.fun creator fees in public on Solana. Every cycle, every route, every wallet paid: all here`;
   const x = `https://twitter.com/intent/tweet?text=${encodeURIComponent(`${text}\n${url}`)}`;
   const tg = `https://t.me/share/url?url=${encodeURIComponent(url)}&text=${encodeURIComponent(text)}`;
 

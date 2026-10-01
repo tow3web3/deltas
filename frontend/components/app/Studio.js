@@ -16,11 +16,13 @@ import Countdown from '../Countdown';
 import { Bolt, Pause, Play, Arrow, Copy, Check, PlatformIcon, Users, World, Wallet, Burn, Vault, Warning, Gas, Receipt, Telegram, InKind, Convert, External, Plus, Close } from '../Icons';
 import { PageAvatar } from '../pages/PageParts';
 import { LoyaltyEditor, RewardEditor, ScheduleEditor } from './Editors';
-import { Button, Seg, Slider, StockPicker, inputCls, focusCls, useToast, useCustomToken, useTokenResearch, shortAddr, fmtUsd, fmtNum, units, scheduleValue, parseSchedule } from './ui';
+import { Button, Seg, Slider, Toggle, StockPicker, SOL_SCHEDULES, inputCls, focusCls, useToast, useCustomToken, useTokenResearch, shortAddr, fmtUsd, fmtNum, units, scheduleValue, parseSchedule } from './ui';
 import TokenCard from './TokenCard';
 import Wizard from './Wizard';
 import SharePanel from './Share';
-import { describeAddress, explorerAddress, explorerTx, getStock, ZERO } from '../../lib/stocks';
+import { describeAddress, explorerAddress, explorerTx, getStock, ZERO, SOL_MINT } from '../../lib/stocks';
+import { getXStock } from '../../lib/xstocks';
+import { chainOf, isEvmAddress, isSolAddress, sameAddress } from '../../lib/chains';
 import { PLATFORMS, PLATFORM_KEYS, parsePage, pageName, pagePath } from '../../lib/pages';
 import { BRAND, BOT_USERNAME } from '../../lib/brand';
 
@@ -42,6 +44,26 @@ const floatGlass = '!bg-[rgba(9,12,19,0.84)] backdrop-blur-xl';
 // A channel of light: the bar of a share, the lit one glowing in its colour.
 const channel = (color, lit = true) => ({ background: `linear-gradient(90deg, ${alpha(color, 0.45)}, ${color})`, boxShadow: lit ? `0 0 10px ${alpha(color, 0.7)}` : 'none' });
 const ADDR = /^0x[0-9a-fA-F]{40}$/;
+
+/* ---------------- the chain of the canvas ---------------- */
+// The coin's chain: the config's, else the shape of the coin's address, else (before setup) the
+// signed-in wallet's. Robinhood Chain when nothing says otherwise, so older data keeps working.
+const chainOfData = (data) => {
+  const c = data?.config?.chain;
+  if (c === 'solana' || c === 'robinhood') return c;
+  return chainOf(data?.config?.source_token_address) || (data?.user?.chain === 'solana' ? 'solana' : 'robinhood');
+};
+// A destination address on the canvas's chain: base58 on Solana (case kept), 0x on Robinhood Chain.
+const validAddr = (chain, a) => (chain === 'solana' ? isSolAddress(a) : ADDR.test(a));
+// What a Solana treasury holds by default: the S&P 500, as on Robinhood Chain.
+const SPYX = getXStock('SPY')?.mint;
+// On Solana, a reward is SOL or a mint; nothing set, or a 0x value left by a default, means SOL.
+const solReward = (v) => (!v || v === SOL_MINT || v === 'SOL' || /^0x/i.test(v) ? 'SOL' : v);
+// The kind hints that say something else on Solana: holders are paid by balance, the burn buys on Jupiter.
+const kindHint = (kind, chain) => (chain === 'solana' && kind === 'holders' ? 'The dividend. Paid by balance.' : chain === 'solana' && kind === 'burn' ? 'Buys your own coin on Jupiter and burns it.' : KIND[kind].hint);
+// The decimals of a cycle's asset: SOL and the xStocks are known; the rest comes from the metadata.
+const decimalsOf = (addr, meta, chain) => (addr === SOL_MINT ? 9 : meta?.[addr]?.decimals ?? (getXStock(addr)?.mint === addr ? getXStock(addr).decimals : chain === 'solana' ? 6 : 18));
+
 const SOURCE_ID = 'source';
 const LEG_X = 480;
 const TG_ID = 'tg'; // the Telegram action node
@@ -67,11 +89,25 @@ function legsFromData(data) {
   if (!out.length) push('holders', 10000);
   return out;
 }
+/**
+ * The legs of a Solana coin, as the engine reads them: a 0x asset means SOL (in kind), a burn
+ * has no asset, and the holders are paid in their leg's asset or else the fixed reward, so the
+ * holders leg shows (and saves) that reward when it names none of its own.
+ */
+function solLegs(legs, reward) {
+  return legs.map((l) => {
+    const asset = l.kind === 'burn' || /^0x/i.test(l.asset) ? '' : l.asset;
+    return { ...l, asset: l.kind === 'holders' && !asset && reward !== 'SOL' ? reward : asset };
+  });
+}
 function draftFromData(data) {
   const c = data.config;
+  const sol = chainOfData(data) === 'solana';
+  const reward = sol ? solReward(c.target_token_address) : null;
   return {
-    legs: legsFromData(data),
-    reward: { rewardMode: c.reward_mode || 'fixed', reward: c.target_token_address === ZERO ? 'ETH' : c.target_token_address, basket: c.basket || 'MAG7' },
+    legs: sol ? solLegs(legsFromData(data), reward) : legsFromData(data),
+    // Solana pays one asset (SOL, an xStock or a mint): the rotating reward modes are Robinhood Chain only.
+    reward: sol ? { rewardMode: 'fixed', reward, basket: c.basket || 'MAG7' } : { rewardMode: c.reward_mode || 'fixed', reward: c.target_token_address === ZERO ? 'ETH' : c.target_token_address, basket: c.basket || 'MAG7' },
     schedule: { schedule: scheduleValue(c), marketHoursOnly: Boolean(c.market_hours_only), feeSource: c.fee_source || 'wallet' },
     loyalty: { enabled: Boolean(c.loyalty_enabled), maxBps: Number(c.loyalty_max_bps || 20000), rampDays: Number(c.loyalty_ramp_days || 30), minHoldHours: Number(c.loyalty_min_hold_hours || 0), sellReset: Boolean(c.loyalty_sell_reset) },
     sourcePos: { x: 40, y: 60 },
@@ -80,10 +116,18 @@ function draftFromData(data) {
 // What counts as a change worth saving: not positions, not what the creator is still typing, not a page's live status.
 const stripPos = (d) => ({ ...d, legs: d.legs.map(({ posX, posY, pageInput, page, ...l }) => (l.kind === 'page' ? { ...l, page: page ? `${page.platform}:${page.handle}` : null } : l)), sourcePos: undefined });
 const totalBps = (legs) => legs.reduce((s, l) => s + l.shareBps, 0);
-const legProblem = (l) => ((l.kind === 'wallet' || l.kind === 'treasury') && !ADDR.test(l.address) ? 'needs an address' : l.kind === 'page' && !l.page ? 'needs a page' : null);
+const legProblem = (l, chain = 'robinhood') => {
+  if ((l.kind === 'wallet' || l.kind === 'treasury') && !validAddr(chain, l.address)) return chain === 'solana' && isEvmAddress(l.address) ? 'needs a Solana address' : 'needs an address';
+  if (l.kind === 'page' && !l.page) return 'needs a page';
+  // A Solana treasury holds an xStock.
+  if (chain === 'solana' && l.kind === 'treasury' && !getXStock(l.asset)) return 'needs an xStock';
+  return null;
+};
 
 /* ---------------- nodes ---------------- */
-function AssetChip({ asset, meta, kind, fallback }) {
+function AssetChip({ asset: given, meta, kind, fallback, chain = 'robinhood' }) {
+  // On Solana the fees arrive as SOL, so in kind is SOL: shown with its own logo.
+  const asset = given || (chain === 'solana' ? SOL_MINT : given);
   const custom = useCustomToken(asset && !getStock(asset) && asset !== ZERO ? asset : null);
   // No conversion: the share leaves as it arrived. The treasury still turns its ETH into SPY.
   if (!asset) {
@@ -97,7 +141,7 @@ function AssetChip({ asset, meta, kind, fallback }) {
   const d = describeAddress(asset, meta?.[asset] || (custom?.symbol ? { symbol: custom.symbol, image: custom.image } : null));
   return (
     <span className="inline-flex min-w-0 items-center gap-1.5 font-mono text-[10.5px] text-mut">
-      <StockLogo address={asset} meta={{ symbol: d.symbol, image: custom?.image }} size="h-4 w-4" text="text-[5px]" />
+      <StockLogo address={asset} meta={{ symbol: d.symbol, image: custom?.image ?? (chain === 'solana' ? meta?.[asset]?.image : undefined) }} size="h-4 w-4" text="text-[5px]" />
       <span className="truncate">{kind === 'holders' ? 'paid in' : kind === 'treasury' ? 'holds' : 'in'} <span className="font-medium text-ink">{d.symbol}</span></span>
     </span>
   );
@@ -109,10 +153,12 @@ function Note({ tone = 'mut', children, title }) {
   return <span title={title} className={`inline-flex shrink-0 items-center gap-1.5 font-mono text-[9.5px] uppercase tracking-[0.14em] ${c[1]}`}><span className={`h-1 w-1 rounded-full ${c[0]}`} />{children}</span>;
 }
 
-/** The dev wallet: where the light enters. Glass lit on the left, the beam leaving from its right. */
+/** The dev wallet (the creator wallet on Solana): where the light enters. Glass lit on the left, the beam leaving from its right. */
 function SourceNode({ data }) {
-  const { src, config, assets, selected } = data;
-  const payable = (assets?.assets || []).filter((a) => (a.isNative ? a.spendable > 0.0005 : a.usd >= 1)).slice(0, 4);
+  const { src, config, assets, selected, chain } = data;
+  const sol = chain === 'solana';
+  // On Solana a cycle routes the SOL above the fee reserve, nothing else the wallet holds.
+  const payable = (assets?.assets || []).filter((a) => (a.isNative ? a.spendable > 0.0005 : !sol && a.usd >= 1)).slice(0, 4);
   return (
     <div className={`frame w-[280px] overflow-visible transition-shadow ${floatGlass} ${selected ? 'shadow-glow' : 'shadow-soft'}`}>
       {/* the exit of the beam, a glow on the right edge where the channels start */}
@@ -121,7 +167,7 @@ function SourceNode({ data }) {
         <StockLogo address={config.source_token_address} meta={src} size="h-9 w-9" text="text-[10px]" />
         <div className="min-w-0 flex-1">
           <div className="truncate font-display text-[15px] font-medium tracking-[-0.02em] text-ink">{src.name || `$${src.symbol || 'TOKEN'}`}</div>
-          <div className="truncate font-mono text-[10.5px] text-mut">dev wallet {shortAddr(config.dev_wallet_public)}</div>
+          <div className="truncate font-mono text-[10.5px] text-mut">{sol ? 'creator wallet' : 'dev wallet'} {shortAddr(config.dev_wallet_public)}</div>
         </div>
         <Note tone={config.is_active ? 'live' : 'mut'} title={config.is_active ? 'Cycles fire on schedule' : 'Nothing goes out until you resume'}>{config.is_active ? 'live' : 'paused'}</Note>
       </div>
@@ -140,27 +186,27 @@ function SourceNode({ data }) {
         <div className="grid grid-cols-2 gap-1.5 border-t border-white/[0.07] p-2.5">
           {payable.map((a, i) => (
             <div key={a.address} className={`flex min-w-0 items-center gap-1.5 rounded-xl bg-white/[0.04] px-2.5 py-1.5 ${payable.length % 2 && i === payable.length - 1 ? 'col-span-2' : ''}`}>
-              <StockLogo address={a.address} meta={{ symbol: a.symbol }} size="h-4 w-4" text="text-[5px]" />
+              <StockLogo address={a.address} meta={{ symbol: a.symbol, image: a.image }} size="h-4 w-4" text="text-[5px]" />
               <span className="truncate font-mono text-[10.5px] tabular-nums text-ink">{fmtNum(a.isNative ? a.spendable : a.amount)}</span>
               <span className="ml-auto font-mono text-[9.5px] text-mut">{a.symbol}</span>
             </div>
           ))}
         </div>
-      ) : <div className="border-t border-white/[0.07] px-4 py-2.5 font-mono text-[10.5px] text-mut">Nothing payable yet. Fees land here first.</div>}
+      ) : <div className="border-t border-white/[0.07] px-4 py-2.5 font-mono text-[10.5px] text-mut">{sol ? 'Nothing to route yet. Creator fees are collected here each cycle.' : 'Nothing payable yet. Fees land here first.'}</div>}
       <Handle type="source" position={Position.Right} className="!h-2.5 !w-2.5 !rounded-full !border-0 !bg-cyan-500 !shadow-[0_0_10px_#5FE3FF]" />
     </div>
   );
 }
 
 function LegNode({ data }) {
-  const { leg, selected, meta, sourceSymbol, source } = data;
+  const { leg, selected, meta, sourceSymbol, source, chain } = data;
   const k = KIND[leg.kind];
   const Icon = k.icon;
   const page = leg.kind === 'page' && leg.page ? leg.page : null;
-  const problem = legProblem(leg);
+  const problem = legProblem(leg, chain);
   const dest = leg.kind === 'holders' ? `every ${sourceSymbol ? `$${sourceSymbol}` : ''} holder` : leg.kind === 'burn' ? `buys $${sourceSymbol || 'TOKEN'}, burns it`
     : leg.kind === 'page' ? (leg.page ? `${PLATFORMS[leg.page.platform]?.label || leg.page.platform} · ${pageName(leg.page.platform, leg.page.handle)}` : 'no page yet')
-      : ADDR.test(leg.address) ? shortAddr(leg.address) : 'no address yet';
+      : validAddr(chain, leg.address) ? shortAddr(leg.address) : 'no address yet';
   // A glass chip lit on its left edge in the colour of its kind (the warning colour while it is incomplete).
   const lit = problem ? '#FF5C33' : k.color;
   const shadow = selected
@@ -170,7 +216,7 @@ function LegNode({ data }) {
     <div className={`panel w-[250px] transition-shadow ${floatGlass} ${problem && !selected ? 'border-down/40' : ''}`} style={{ borderLeftColor: alpha(lit, 0.75), boxShadow: shadow }}>
       <span aria-hidden="true" className="pointer-events-none absolute inset-y-4 -left-px w-[2px] rounded-full" style={{ background: lit, boxShadow: `0 0 12px ${lit}` }} />
       <Handle type="target" position={Position.Left} className="!h-2.5 !w-2.5 !rounded-full !border-0" style={{ background: k.color, boxShadow: `0 0 10px ${k.color}` }} />
-      {(leg.kind === 'holders' || leg.kind === 'burn') && <Handle type="source" position={Position.Right} className={`!h-1.5 !w-1.5 !rounded-full !border-0 ${data.notify ? '!bg-cyan-500 !shadow-[0_0_8px_#5FE3FF]' : '!bg-white/20'}`} />}
+      {(leg.kind === 'holders' || (leg.kind === 'burn' && chain !== 'solana')) && <Handle type="source" position={Position.Right} className={`!h-1.5 !w-1.5 !rounded-full !border-0 ${data.notify ? '!bg-cyan-500 !shadow-[0_0_8px_#5FE3FF]' : '!bg-white/20'}`} />}
       <div className="flex items-start gap-2.5 px-3.5 pt-3">
         {page
           ? <PageAvatar page={page} size="h-8 w-8" badge="h-3.5 w-3.5" />
@@ -189,7 +235,7 @@ function LegNode({ data }) {
       <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1 px-3.5 py-2.5">
         {leg.kind === 'burn'
           ? <span className="inline-flex min-w-0 items-center gap-1.5 font-mono text-[10.5px] text-mut"><StockLogo address={source?.address} meta={source?.meta} size="h-4 w-4" text="text-[5px]" /><span className="truncate">buys back <span className="font-medium text-ink">${sourceSymbol || 'TOKEN'}</span></span></span>
-          : <AssetChip asset={leg.asset} meta={meta} kind={leg.kind} fallback={leg.kind === 'treasury' ? 'in kind, ETH buys SPY' : 'in kind'} />}
+          : <AssetChip asset={leg.asset} meta={meta} kind={leg.kind} chain={chain} fallback={leg.kind === 'treasury' ? 'in kind, ETH buys SPY' : 'in kind'} />}
         {page && (page.claimed
           ? <Note tone="live" title="Claimed: its share is paid straight to its owner">paid direct</Note>
           : <Note tone="gold" title="Not claimed yet: the share waits in a vault for its owner">in its vault</Note>)}
@@ -242,9 +288,11 @@ function ShareEdge({ id, sourceX, sourceY, targetX, targetY, sourcePosition, tar
 
 /** Actions: what happens off-chain when a leg pays. Today: Telegram notifications. */
 function ActionNode({ data }) {
-  const { selected, telegram, sourceSymbol } = data;
+  const { selected, telegram, sourceSymbol, chain } = data;
+  // Group burn alerts run on Robinhood Chain only: a Solana coin binds receipts.
+  const withBurns = chain !== 'solana';
   const receipts = telegram?.receiptsChatId ? telegram.receiptsTitle || 'your group' : null;
-  const burns = telegram?.burnAlerts?.length ? telegram.burnAlerts[0].title || 'your group' : null;
+  const burns = withBurns && telegram?.burnAlerts?.length ? telegram.burnAlerts[0].title || 'your group' : null;
   const bound = Boolean(receipts || burns);
   const Row = ({ icon: RowIcon, label, to }) => (
     <div className="flex items-center gap-2 px-3.5 py-1.5">
@@ -267,7 +315,7 @@ function ActionNode({ data }) {
       </div>
       <div className="divide-y divide-white/[0.06] border-y border-white/[0.07]">
         <Row icon={Receipt} label="Dividend receipts" to={receipts} />
-        <Row icon={Burn} label="Burn alerts" to={burns} />
+        {withBurns && <Row icon={Burn} label="Burn alerts" to={burns} />}
       </div>
       <div className="px-3.5 py-2.5 font-mono text-[10.5px] text-mut">{bound ? 'posts in Telegram every cycle' : `click to connect a group for $${sourceSymbol || 'TOKEN'}`}</div>
     </div>
@@ -352,10 +400,17 @@ function InspectorHead({ caption, children }) {
   );
 }
 
-function LegInspector({ leg, draft, setDraft, meta, sourceSymbol, onRemove }) {
+function LegInspector({ leg, draft, setDraft, meta, sourceSymbol, onRemove, chain = 'robinhood' }) {
   const k = KIND[leg.kind];
   const KindIcon = k.icon;
+  const sol = chain === 'solana';
   const patch = (p) => setDraft((d) => ({ ...d, legs: d.legs.map((l) => (l.key === leg.key ? { ...l, ...p } : l)) }));
+  // Solana holders: one asset, written on the leg and as the fixed reward, so the engine and the public pages agree. SOL is in kind.
+  const setHoldersAsset = (v) => setDraft((d) => ({
+    ...d,
+    reward: { ...d.reward, rewardMode: 'fixed', reward: v === SOL_MINT ? 'SOL' : v },
+    legs: d.legs.map((l) => (l.key === leg.key ? { ...l, asset: v === SOL_MINT ? '' : v } : l)),
+  }));
   const total = totalBps(draft.legs);
   const balanceOthers = () => setDraft((d) => {
     const others = d.legs.filter((l) => l.key !== leg.key);
@@ -378,7 +433,7 @@ function LegInspector({ leg, draft, setDraft, meta, sourceSymbol, onRemove }) {
           <span className="figure text-2xl font-medium leading-none tracking-[-0.03em] text-ink">{sharePct(leg.shareBps)}<span className="ml-px text-sm text-mut">%</span></span>
         </div>
         <input value={leg.label} onChange={(e) => patch({ label: e.target.value.slice(0, 40) })} aria-label="Name of this destination" className="mt-2 w-full border-b border-transparent bg-transparent pb-0.5 font-display text-lg font-medium tracking-[-0.02em] text-ink outline-none transition-colors hover:border-white/15 focus:border-cyan-500/60" />
-        <p className="mt-1 text-xs leading-snug text-mut">{k.hint}</p>
+        <p className="mt-1 text-xs leading-snug text-mut">{kindHint(leg.kind, chain)}</p>
       </InspectorHead>
       <Section title="Share of every cycle" aside={total !== 10000 && <button type="button" onClick={balanceOthers} className={textLink}>Balance the others to 100%</button>}>
         <Slider label={k.label} value={leg.shareBps / 100} step={0.5} onChange={(v) => patch({ shareBps: Math.round(v * 100) })} format={(v) => `${v}%`} color={k.color} />
@@ -390,24 +445,60 @@ function LegInspector({ leg, draft, setDraft, meta, sourceSymbol, onRemove }) {
       </Section>
       {(leg.kind === 'wallet' || leg.kind === 'treasury') && (
         <Section title={leg.kind === 'wallet' ? 'Destination address' : 'Treasury wallet'}>
-          <input value={leg.address} onChange={(e) => patch({ address: e.target.value.trim() })} placeholder="0x…" className={inputCls} />
-          {leg.address && !ADDR.test(leg.address) && <p className="mt-1 text-xs text-down">Not a valid address.</p>}
+          {/* A Solana address is base58 and case-sensitive: kept exactly as pasted. */}
+          <input value={leg.address} onChange={(e) => patch({ address: e.target.value.trim() })} placeholder={sol ? 'A Solana wallet address' : '0x…'} spellCheck={false} autoCapitalize="off" autoCorrect="off" autoComplete="off" className={inputCls} />
+          {leg.address && !validAddr(chain, leg.address) && <p className="mt-1 text-xs text-down">{!sol ? 'Not a valid address.' : isEvmAddress(leg.address) ? 'This coin lives on Solana: paste a Solana address, not a 0x one.' : 'Not a Solana address.'}</p>}
           {leg.kind === 'treasury' && <p className="mt-1.5 text-xs text-mut">A wallet you control. {BRAND} only sends to it. Its holdings become the book value on the public dashboard.</p>}
         </Section>
       )}
-      {leg.kind === 'page' && <PageSection leg={leg} patch={patch} taken={draft.legs.filter((l) => l.key !== leg.key && l.page).map((l) => `${l.page.platform}:${l.page.handle}`)} />}
+      {leg.kind === 'page' && <PageSection leg={leg} patch={patch} chain={chain} taken={draft.legs.filter((l) => l.key !== leg.key && l.page).map((l) => `${l.page.platform}:${l.page.handle}`)} />}
       {leg.kind === 'burn' && (
         <Section title="What burns">
-          <p className="text-xs leading-snug text-mut">This share buys <span className="font-mono font-medium text-ink">${sourceSymbol || 'your token'}</span> back and sends it to the burn address. Stocks in this share are sold for ETH first. Supply shrinks every cycle.</p>
+          {sol
+            ? <p className="text-xs leading-snug text-mut">This share buys <span className="font-mono font-medium text-ink">${sourceSymbol || 'your token'}</span> on Jupiter and burns it: the tokens are destroyed, supply shrinks every cycle. If no route fills at 90% of the fair price, the share goes to the holders that cycle.</p>
+            : <p className="text-xs leading-snug text-mut">This share buys <span className="font-mono font-medium text-ink">${sourceSymbol || 'your token'}</span> back and sends it to the burn address. Stocks in this share are sold for ETH first. Supply shrinks every cycle.</p>}
         </Section>
       )}
-      {leg.kind === 'holders' && (
+      {leg.kind === 'holders' && sol && (
+        <Section title="Holders are paid in">
+          <div className="space-y-2">
+            <StockPicker chain="solana" value={leg.asset || SOL_MINT} onChange={setHoldersAsset} />
+            <AssetResearch address={leg.asset} />
+            <p className="text-[11px] leading-snug text-mut">SOL, an xStock, or any Solana token by mint. Bought on Jupiter each cycle with a 90% fair-price guard; if no route fills, holders are paid in SOL that cycle.</p>
+          </div>
+          <Callout tone="live" className="mt-2.5 !text-[11px]">Paid by balance, about 18 holders per SOL transaction or 7 per token transaction. Paying in a token skips, for that cycle, a holder whose share is worth less than opening a token account (about 0.002 SOL).</Callout>
+        </Section>
+      )}
+      {leg.kind === 'treasury' && sol && (
+        <Section title="Held in">
+          <div className="space-y-2">
+            <StockPicker chain="solana" value={leg.asset} onChange={(v) => patch({ asset: v })} allowEth={false} allowAddress={false} />
+            <AssetResearch address={leg.asset} />
+            <p className="text-[11px] leading-snug text-mut">The treasury holds an xStock: each cycle its share buys it on Jupiter with the 90% fair-price guard. If no route fills, that share reaches the treasury in SOL.</p>
+          </div>
+        </Section>
+      )}
+      {(leg.kind === 'wallet' || leg.kind === 'page') && sol && (
+        <Section title="Payout asset">
+          {leg.kind === 'page' && <p className="mb-2.5 text-xs leading-snug text-mut">Pages are paid in SOL unless you choose otherwise. When the owner claims, everything the vault holds is swept to their Solana wallet.</p>}
+          <Seg size="sm" value={convertMode} onChange={(v) => patch({ asset: v === 'kind' ? '' : SPYX })}
+            options={[{ value: 'kind', icon: InKind, label: 'In SOL' }, { value: 'convert', icon: Convert, label: 'Convert to' }]} />
+          {convertMode === 'convert' && (
+            <div className="mt-2.5 space-y-2">
+              <StockPicker chain="solana" value={leg.asset} onChange={(v) => patch({ asset: v })} />
+              <AssetResearch address={leg.asset} />
+              <p className="text-[11px] leading-snug text-mut">SOL, an xStock, or any token by mint. Bought on Jupiter with the fair-price guard; if no route fills, this leg is paid in SOL that cycle.</p>
+            </div>
+          )}
+        </Section>
+      )}
+      {leg.kind === 'holders' && !sol && (
         <Section title="ETH fees convert to">
           <RewardEditor value={draft.reward} onChange={(v) => setDraft((d) => ({ ...d, reward: v }))} />
           <Callout tone="live" className="mt-2.5 !text-[11px]">Not a stock? The second tab of the picker takes any token by contract address, and holders get paid in that token.</Callout>
         </Section>
       )}
-      {leg.kind !== 'burn' && (
+      {leg.kind !== 'burn' && !sol && (
         <Section title={leg.kind === 'holders' ? 'Stock fees' : 'Payout asset'}>
           {leg.kind === 'page' && <p className="mb-2.5 text-xs leading-snug text-mut">Pages are paid in ETH unless you choose otherwise: a vault that holds ETH can pay for its own sweep when the owner claims.</p>}
           <Seg size="sm" value={convertMode} onChange={(v) => patch({ asset: v === 'kind' ? '' : leg.kind === 'treasury' ? getStock('SPY').address : leg.kind === 'holders' && draft.reward.rewardMode === 'fixed' && draft.reward.reward !== 'ETH' ? draft.reward.reward : getStock('SPY').address })}
@@ -421,7 +512,8 @@ function LegInspector({ leg, draft, setDraft, meta, sourceSymbol, onRemove }) {
           )}
         </Section>
       )}
-      {leg.kind === 'holders' && (
+      {/* Loyalty weighting runs on Robinhood Chain only: Solana holders are paid by balance. */}
+      {leg.kind === 'holders' && !sol && (
         <Section title="Record date and loyalty">
           <LoyaltyEditor value={draft.loyalty} onChange={(v) => setDraft((d) => ({ ...d, loyalty: v }))} />
         </Section>
@@ -435,7 +527,8 @@ function LegInspector({ leg, draft, setDraft, meta, sourceSymbol, onRemove }) {
 }
 
 /** Paste a link, see the page. The page and its vault are created when the routing is saved. */
-function PageSection({ leg, patch, taken }) {
+function PageSection({ leg, patch, taken, chain = 'robinhood' }) {
+  const sol = chain === 'solana';
   const [text, setText] = useState(leg.pageInput || '');
   const [state, setState] = useState({ status: 'idle' });
   const seq = useRef(0);
@@ -449,9 +542,11 @@ function PageSection({ leg, patch, taken }) {
     setState({ status: 'loading' });
     const t = setTimeout(async () => {
       let info = null;
-      try { const res = await fetch(`/api/pages/resolve?input=${encodeURIComponent(raw)}`); if (res.ok) info = await res.json(); } catch { /* offline or demo: the parsed page is enough */ }
+      try { const res = await fetch(`/api/pages/resolve?input=${encodeURIComponent(raw)}&chain=${chain}`); if (res.ok) info = await res.json(); } catch { /* offline or demo: the parsed page is enough */ }
       if (mine !== seq.current) return;
-      const page = { platform: parsed.platform, handle: parsed.handle, claimed: Boolean(info?.claimed), vault: info?.vault || null, avatar: info?.avatar || null };
+      // A page has a vault per chain: only one on this coin's chain is shown (on Solana it is made on the first payment).
+      const vault = info?.vault && validAddr(chain, info.vault) ? info.vault : null;
+      const page = { platform: parsed.platform, handle: parsed.handle, claimed: Boolean(info?.claimed), vault, avatar: info?.avatar || null };
       patch({ page, pageInput: '', ...(KIND_LABELS.has(leg.label) ? { label: pageName(page.platform, page.handle).slice(0, 40) } : {}) });
       setText('');
       setState({ status: 'idle' });
@@ -467,7 +562,7 @@ function PageSection({ leg, patch, taken }) {
           <PageAvatar page={p} size="h-9 w-9" badge="h-4 w-4" lit={p.claimed} />
           <div className="min-w-0 flex-1">
             <div className="truncate text-[13px] font-medium text-ink">{pageName(p.platform, p.handle)}</div>
-            <div className="truncate font-mono text-[10.5px] text-mut">{PLATFORMS[p.platform]?.label} {PLATFORMS[p.platform]?.noun}{p.vault ? ` · vault ${shortAddr(p.vault)}` : ' · vault created on save'}</div>
+            <div className="truncate font-mono text-[10.5px] text-mut">{PLATFORMS[p.platform]?.label} {PLATFORMS[p.platform]?.noun}{p.vault ? ` · vault ${shortAddr(p.vault)}` : sol ? ' · vault made on its first payment' : ' · vault created on save'}</div>
           </div>
           <Note tone={p.claimed ? 'live' : 'gold'}>{p.claimed ? 'claimed' : 'unclaimed'}</Note>
         </div>
@@ -481,7 +576,9 @@ function PageSection({ leg, patch, taken }) {
       </div>
       <p className="mt-2.5 text-xs leading-snug text-mut">{p?.claimed
         ? 'The owner of this page has claimed it: its share goes straight to their wallet every cycle.'
-        : 'The owner does not need an account. The share is held in a vault of its own, visible on the public profile. They sign in with the platform (or add a DNS record for a domain), connect a wallet, and receive everything that waited.'}</p>
+        : sol
+          ? 'The owner does not need an account. The share is held in a Solana vault of its own, visible on the public profile. They sign in with the platform (or add a DNS record for a domain), connect a Solana wallet, and receive everything that waited.'
+          : 'The owner does not need an account. The share is held in a vault of its own, visible on the public profile. They sign in with the platform (or add a DNS record for a domain), connect a wallet, and receive everything that waited.'}</p>
     </Section>
   );
 }
@@ -496,15 +593,17 @@ function AssetResearch({ address }) {
   return <TokenCard token={info} compact />;
 }
 
-function DevKeyReveal({ onRevealKey, address }) {
+function DevKeyReveal({ onRevealKey, address, chain = 'robinhood' }) {
   const toast = useToast();
   const [busy, setBusy] = useState(false);
   const [key, setKey] = useState(null);
+  const sol = chain === 'solana';
   const reveal = async () => {
     setBusy(true);
     try {
       const r = await onRevealKey();
-      if (r?.address && address && r.address.toLowerCase() !== address.toLowerCase()) throw new Error('Key does not match this dev wallet');
+      // 0x compared without case, base58 exactly.
+      if (r?.address && address && !sameAddress(r.address, address)) throw new Error(`Key does not match this ${sol ? 'creator' : 'dev'} wallet`);
       setKey(r.privateKey);
     } catch (e) { toast(e.message, 'err'); } finally { setBusy(false); }
   };
@@ -512,7 +611,7 @@ function DevKeyReveal({ onRevealKey, address }) {
   return (
     <div className="mt-3 rounded-2xl border border-white/10 bg-white/[0.03] p-3">
       <div className="flex items-start justify-between gap-3">
-        <div className="text-xs leading-snug"><span className="font-medium text-ink">Your wallet, your key.</span> <span className="text-mut">Export it anytime to import the dev wallet elsewhere.</span></div>
+        <div className="text-xs leading-snug"><span className="font-medium text-ink">Your wallet, your key.</span> <span className="text-mut">{sol ? 'Kept encrypted on the server. Reveal it anytime with a fresh signature.' : 'Export it anytime to import the dev wallet elsewhere.'}</span></div>
         {!key && <Button variant="ghost" className="shrink-0 !px-3 !py-1 !text-[11px]" onClick={reveal} busy={busy}>Reveal key</Button>}
       </div>
       {key && (
@@ -529,8 +628,10 @@ function DevKeyReveal({ onRevealKey, address }) {
 function ActionInspector({ data, act, busy, tg, demo }) {
   const { config, user, telegram } = data;
   const bot = BOT_USERNAME;
+  // Group burn alerts run on Robinhood Chain only: a Solana coin binds dividend receipts.
+  const sol = chainOfData(data) === 'solana';
   const receipts = telegram?.receiptsChatId ? telegram.receiptsTitle || `chat ${telegram.receiptsChatId}` : null;
-  const burns = telegram?.burnAlerts?.length ? telegram.burnAlerts.map((b) => b.title || `chat ${b.chatId}`).join(', ') : null;
+  const burns = !sol && telegram?.burnAlerts?.length ? telegram.burnAlerts.map((b) => b.title || `chat ${b.chatId}`).join(', ') : null;
   const Status = ({ ok, icon: StatusIcon, label, to }) => (
     <div className="flex items-center gap-2.5 px-3 py-2">
       <StatusIcon className={`h-4 w-4 shrink-0 ${ok ? 'text-cyan-500' : 'text-dim'}`} />
@@ -549,14 +650,26 @@ function ActionInspector({ data, act, busy, tg, demo }) {
       <InspectorHead>
         <span className="label flex items-center gap-1.5"><Telegram className="h-4 w-4 text-[#2AABEE]" />Action · Telegram</span>
         <div className="mt-2 font-display text-lg font-medium tracking-[-0.02em] text-ink">Tell your community, every cycle</div>
-        <p className="mt-1 text-xs leading-snug text-mut">The bot posts in your group when the holders leg pays (a receipt card with Share on X) and when the burn leg burns (the amount, the share of supply gone, the transaction).</p>
+        <p className="mt-1 text-xs leading-snug text-mut">{sol
+          ? 'The bot posts in your group when the holders leg pays: a receipt card with Share on X.'
+          : 'The bot posts in your group when the holders leg pays (a receipt card with Share on X) and when the burn leg burns (the amount, the share of supply gone, the transaction).'}</p>
       </InspectorHead>
       <Section title="Bound groups">
         <div className="divide-y divide-white/[0.07] overflow-hidden rounded-2xl border border-white/10 bg-white/[0.02]">
           <Status ok={Boolean(receipts)} icon={Receipt} label="Dividend receipts" to={receipts} />
-          <Status ok={Boolean(burns)} icon={Burn} label="Burn alerts" to={burns} />
+          {!sol && <Status ok={Boolean(burns)} icon={Burn} label="Burn alerts" to={burns} />}
         </div>
       </Section>
+      {sol ? (
+        <Section title="How to bind a group">
+          <ol className="space-y-3">
+            <Step n={1}>Add {bot ? <a href={`https://t.me/${bot}`} target="_blank" rel="noopener noreferrer" className="font-mono text-hood-600 hover:underline">@{bot}</a> : <>the {BRAND} bot</>} to your Telegram group as admin.</Step>
+            <Step n={2}>Link your own Telegram below, so the bot knows your coin.</Step>
+            <Step n={3}>In the group, send:<Command shown="/announce" text="/announce" /></Step>
+          </ol>
+          <p className="mt-3 text-[11px] leading-snug text-mut">Send the command inside a topic to post there. <span className="font-mono text-ink">/announce off</span> stops it. Group burn alerts run on Robinhood Chain only.</p>
+        </Section>
+      ) : (
       <Section title="How to bind a group">
         <ol className="space-y-3">
           <Step n={1}>Add {bot ? <a href={`https://t.me/${bot}`} target="_blank" rel="noopener noreferrer" className="font-mono text-hood-600 hover:underline">@{bot}</a> : <>the {BRAND} bot</>} to your Telegram group as admin.</Step>
@@ -565,6 +678,7 @@ function ActionInspector({ data, act, busy, tg, demo }) {
         </ol>
         <p className="mt-3 text-[11px] leading-snug text-mut">Send the command inside a topic to post there. <span className="font-mono text-ink">/burns off</span> or <span className="font-mono text-ink">/announce off</span> stops it.</p>
       </Section>
+      )}
       <Section title="Alerts for you">
         {user.telegramLinked ? (
           <p className="text-xs text-mut">Your account is linked{user.telegramUsername ? ` to @${user.telegramUsername}` : ''}: every cycle's result also reaches you in a private chat.</p>
@@ -579,25 +693,49 @@ function ActionInspector({ data, act, busy, tg, demo }) {
   );
 }
 
+// On Solana the engine keeps this much SOL in the creator wallet for network fees and routes the rest.
+const SOL_RESERVE = 0.02;
+
+/** Solana: the schedules the engine runs there and the market-hours hold. Fees come from pump.fun, so there is no fee source to pick. */
+function SolScheduleEditor({ value, onChange }) {
+  const set = (p) => onChange({ ...value, ...p });
+  return (
+    <div className="space-y-3">
+      <div>
+        <div className="label mb-1.5">A cycle fires</div>
+        <Seg value={value.schedule} onChange={(v) => set({ schedule: v })} options={SOL_SCHEDULES} size="sm" />
+      </div>
+      <Toggle checked={value.marketHoursOnly} onChange={(v) => set({ marketHoursOnly: v })} label="Market hours only" hint="Skip cycles outside 9:30 to 16:00 New York time, weekdays" />
+      <p className="text-[11px] leading-snug text-mut">Each cycle collects the coin&apos;s pump.fun creator fees (bonding curve and PumpSwap) into the creator wallet, then routes them. Under 0.005 SOL to route, the cycle waits for the next one.</p>
+    </div>
+  );
+}
+
 function SourceInspector({ data, draft, setDraft, act, busy, tg, onRevealKey }) {
   const { config, assets, user } = data;
+  const chain = chainOfData(data);
+  const sol = chain === 'solana';
   const eth = assets?.assets?.find((a) => a.isNative);
-  const lowGas = eth && eth.amount < (assets.gasReserveEth || 0.002);
+  const lowGas = eth && eth.amount < (sol ? SOL_RESERVE : assets.gasReserveEth || 0.002);
   return (
     <>
-      <InspectorHead caption="Dev wallet">
+      <InspectorHead caption={sol ? 'Creator wallet' : 'Dev wallet'}>
         <div className="mt-2 break-all font-mono text-xs leading-relaxed text-ink">{config.dev_wallet_public}</div>
-        <div className="mt-2 flex gap-1.5"><CopyBtn text={config.dev_wallet_public} label="Copy address" /><a href={explorerAddress(config.dev_wallet_public)} target="_blank" rel="noopener noreferrer" className={smallBtn}>Explorer<External className="h-2.5 w-2.5" /></a></div>
-        <p className="mt-2.5 text-xs leading-snug text-mut">Set this address as the fee recipient on your launchpad. Whatever lands here is what the next cycle routes.</p>
-        {lowGas && <Callout icon={Gas} className="mt-2.5">Low gas: <span className="font-mono text-ink">{fmtNum(eth.amount)} ETH</span>. Send about 0.005 ETH so cycles can pay transfers.</Callout>}
-        <DevKeyReveal onRevealKey={onRevealKey} address={config.dev_wallet_public} />
+        <div className="mt-2 flex gap-1.5"><CopyBtn text={config.dev_wallet_public} label="Copy address" /><a href={explorerAddress(config.dev_wallet_public)} target="_blank" rel="noopener noreferrer" className={smallBtn}>{sol ? 'Solscan' : 'Explorer'}<External className="h-2.5 w-2.5" /></a></div>
+        <p className="mt-2.5 text-xs leading-snug text-mut">{sol
+          ? `The wallet that created the coin on pump.fun. Each cycle collects its creator fees here, keeps ${SOL_RESERVE} SOL for network fees and routes the rest.`
+          : 'Set this address as the fee recipient on your launchpad. Whatever lands here is what the next cycle routes.'}</p>
+        {lowGas && (sol
+          ? <Callout icon={Gas} className="mt-2.5">Under the fee reserve: <span className="font-mono text-ink">{fmtNum(eth.amount)} SOL</span>. Cycles keep {SOL_RESERVE} SOL here for network fees and route only what is above it.</Callout>
+          : <Callout icon={Gas} className="mt-2.5">Low gas: <span className="font-mono text-ink">{fmtNum(eth.amount)} ETH</span>. Send about 0.005 ETH so cycles can pay transfers.</Callout>)}
+        <DevKeyReveal onRevealKey={onRevealKey} address={config.dev_wallet_public} chain={chain} />
       </InspectorHead>
       <Section title="Holdings" aside={assets && <span className="figure text-sm text-ink">{fmtUsd(assets.totalUsd)}</span>}>
         {assets?.error && <p className="text-xs text-down">{assets.error}</p>}
         <div className="divide-y divide-white/[0.06]">
           {(assets?.assets || []).map((a) => (
             <div key={a.address} className="grid grid-cols-[auto_1fr_auto_4.5rem] items-center gap-2 py-2">
-              <StockLogo address={a.address} meta={{ symbol: a.symbol }} size="h-5 w-5" text="text-[6px]" />
+              <StockLogo address={a.address} meta={{ symbol: a.symbol, image: a.image }} size="h-5 w-5" text="text-[6px]" />
               <span className="truncate font-mono text-xs text-ink">{a.symbol}</span>
               <span className="font-mono text-[11px] tabular-nums text-mut">{fmtNum(a.amount)}</span>
               <span className="figure text-right text-xs text-ink">{fmtUsd(a.usd)}</span>
@@ -605,9 +743,12 @@ function SourceInspector({ data, draft, setDraft, act, busy, tg, onRevealKey }) 
           ))}
           {assets && !(assets.assets || []).some((a) => a.usd >= 0.01 || a.amount > 0) && <div className="py-2 text-xs text-mut">Empty so far.</div>}
         </div>
+        {sol && assets && <p className="mt-2 text-[11px] leading-snug text-mut">A cycle routes the SOL above the {SOL_RESERVE} SOL reserve. Other tokens in this wallet stay where they are.</p>}
       </Section>
-      <Section title="Schedule and fee source">
-        <ScheduleEditor value={draft.schedule} onChange={(v) => setDraft((d) => ({ ...d, schedule: v }))} />
+      <Section title={sol ? 'Schedule' : 'Schedule and fee source'}>
+        {sol
+          ? <SolScheduleEditor value={draft.schedule} onChange={(v) => setDraft((d) => ({ ...d, schedule: v }))} />
+          : <ScheduleEditor value={draft.schedule} onChange={(v) => setDraft((d) => ({ ...d, schedule: v }))} />}
       </Section>
       <Section title="Telegram remote">
         {user.telegramLinked ? (
@@ -620,7 +761,7 @@ function SourceInspector({ data, draft, setDraft, act, busy, tg, onRevealKey }) 
         )}
       </Section>
       <Section title="Danger zone">
-        <p className="mb-2 text-xs text-mut">Deleting removes the bot's access to the dev wallet. Move its funds out first.</p>
+        <p className="mb-2 text-xs text-mut">{sol ? `Deleting stops the cycles and removes ${BRAND}'s copy of the creator wallet key. The wallet and its funds stay yours.` : "Deleting removes the bot's access to the dev wallet. Move its funds out first."}</p>
         <Button variant="danger" className="!py-1.5 text-xs" onClick={() => act('delete')} busy={busy === 'delete'}>Delete this policy</Button>
       </Section>
     </>
@@ -630,16 +771,28 @@ function SourceInspector({ data, draft, setDraft, act, busy, tg, onRevealKey }) 
 function DevWalletCard({ data, select }) {
   const { config, assets } = data;
   if (!config?.dev_wallet_public) return null;
+  const sol = chainOfData(data) === 'solana';
   const list = (assets?.assets || []).filter((a) => a.amount > 0 || a.usd >= 0.01);
   const eth = list.find((a) => a.isNative);
-  const lowGas = eth ? eth.amount < (assets?.gasReserveEth || 0.002) : Boolean(assets);
+  const lowGas = eth ? eth.amount < (sol ? SOL_RESERVE : assets?.gasReserveEth || 0.002) : Boolean(assets);
   const top = list.filter((a) => !a.isNative).sort((a, b) => (b.usd || 0) - (a.usd || 0)).slice(0, 4);
+  // On Solana what waits is the SOL above the reserve: its dollar value, from the SOL row's own price.
+  const solRoutableUsd = eth && eth.amount > 0 && eth.usd != null ? eth.usd * ((eth.spendable ?? eth.amount) / eth.amount) : 0;
   return (
     <div className="border-b border-white/[0.07] px-4 py-4">
       <div className="flex items-center justify-between gap-2">
-        <div className="label">Dev wallet</div>
-        <div className="flex items-center gap-1.5"><CopyBtn text={config.dev_wallet_public} label={shortAddr(config.dev_wallet_public)} /><a href={explorerAddress(config.dev_wallet_public)} target="_blank" rel="noopener noreferrer" title="Open in the explorer" className={`${smallBtn} !px-2`}><External className="h-3 w-3" /></a></div>
+        <div className="label">{sol ? 'Creator wallet' : 'Dev wallet'}</div>
+        <div className="flex items-center gap-1.5"><CopyBtn text={config.dev_wallet_public} label={shortAddr(config.dev_wallet_public)} /><a href={explorerAddress(config.dev_wallet_public)} target="_blank" rel="noopener noreferrer" title={sol ? 'Open in Solscan' : 'Open in the explorer'} className={`${smallBtn} !px-2`}><External className="h-3 w-3" /></a></div>
       </div>
+      {sol ? (
+        <div className="mt-3 flex items-end justify-between gap-3">
+          <div className="min-w-0">
+            <div className="figure text-4xl font-medium leading-none tracking-[-0.03em] text-ink">{assets ? fmtNum(eth?.spendable || 0) : '…'}<span className="ml-1.5 text-base text-mut">SOL</span></div>
+            <div className="mt-1.5 text-[11px] text-mut">{assets ? `${fmtUsd(solRoutableUsd)} ` : ''}waiting to be routed {config.scheduleLabel ? config.scheduleLabel.toLowerCase() : ''}</div>
+          </div>
+          {eth && <div title={`SOL in the creator wallet; ${SOL_RESERVE} SOL stays for network fees`} className={`flex shrink-0 items-center gap-1 font-mono text-[10.5px] tabular-nums ${lowGas ? 'text-gold-600' : 'text-mut'}`}><Gas className="h-3.5 w-3.5" />{fmtNum(eth.amount)} SOL</div>}
+        </div>
+      ) : (
       <div className="mt-3 flex items-end justify-between gap-3">
         <div>
           <div className="figure text-4xl font-medium leading-none tracking-[-0.03em] text-ink">{assets ? fmtUsd(assets.totalUsd || 0) : '…'}</div>
@@ -647,12 +800,14 @@ function DevWalletCard({ data, select }) {
         </div>
         {eth && <div title="Gas in the dev wallet" className={`flex items-center gap-1 font-mono text-[10.5px] tabular-nums ${lowGas ? 'text-gold-600' : 'text-mut'}`}><Gas className="h-3.5 w-3.5" />{fmtNum(eth.amount)} ETH</div>}
       </div>
+      )}
       {assets?.error && <p className="mt-2 text-xs text-down">{assets.error}</p>}
+      {top.length > 0 && sol && <div className="label mt-3.5 !text-[9.5px]">Other tokens here, not routed</div>}
       {top.length > 0 && (
-        <div className="mt-3.5 divide-y divide-white/[0.06] border-y border-white/[0.07]">
+        <div className={`${sol ? 'mt-1.5' : 'mt-3.5'} divide-y divide-white/[0.06] border-y border-white/[0.07]`}>
           {top.map((a) => (
             <div key={a.address} className="grid grid-cols-[auto_1fr_auto_4.5rem] items-center gap-2 py-1.5">
-              <StockLogo address={a.address} meta={{ symbol: a.symbol }} size="h-4 w-4" text="text-[5px]" />
+              <StockLogo address={a.address} meta={{ symbol: a.symbol, image: a.image }} size="h-4 w-4" text="text-[5px]" />
               <span className="truncate font-mono text-xs text-ink">{a.symbol}</span>
               <span className="font-mono text-[11px] tabular-nums text-mut">{fmtNum(a.amount)}</span>
               <span className="figure text-right text-xs text-ink">{fmtUsd(a.usd)}</span>
@@ -660,15 +815,16 @@ function DevWalletCard({ data, select }) {
           ))}
         </div>
       )}
-      {assets && list.length === 0 && <p className="mt-2.5 text-xs leading-snug text-mut">Empty so far. Point your launchpad fee recipient here; the next cycle routes whatever lands.</p>}
-      {lowGas && assets && <Callout icon={Gas} className="mt-2.5">Low gas. Send about 0.005 ETH so cycles can pay the transfers.</Callout>}
+      {assets && list.length === 0 && <p className="mt-2.5 text-xs leading-snug text-mut">{sol ? 'Empty so far. Each cycle collects the pump.fun creator fees of your coin here, then routes them.' : 'Empty so far. Point your launchpad fee recipient here; the next cycle routes whatever lands.'}</p>}
+      {lowGas && assets && <Callout icon={Gas} className="mt-2.5">{sol ? `Under the ${SOL_RESERVE} SOL fee reserve. Cycles keep that much here for network fees and route what is above it.` : 'Low gas. Send about 0.005 ETH so cycles can pay the transfers.'}</Callout>}
       <button type="button" onClick={() => select(SOURCE_ID)} className={`mt-2.5 ${textLink}`}>All holdings and settings<Arrow className="h-2.5 w-2.5" /></button>
     </div>
   );
 }
 
-function RoutingSummary({ draft, meta, select, data }) {
+function RoutingSummary({ draft, meta, select, data, chain = 'robinhood' }) {
   const total = totalBps(draft.legs);
+  const sol = chain === 'solana';
   return (
     <>
       {data && <DevWalletCard data={data} select={select} />}
@@ -684,16 +840,18 @@ function RoutingSummary({ draft, meta, select, data }) {
         {draft.legs.map((l) => {
           const k = KIND[l.kind];
           const RowIcon = k.icon;
-          const bad = legProblem(l);
+          const bad = legProblem(l, chain);
+          // On Solana in kind is SOL: every leg but the burn shows what it pays in.
+          const shown = l.asset || (sol && l.kind !== 'burn' ? SOL_MINT : '');
           return (
             <button key={l.key} type="button" onClick={() => select(l.key)} className="group relative flex w-full items-center gap-2.5 px-4 py-2.5 text-left transition-colors hover:bg-white/[0.04] focus-visible:bg-white/[0.04] focus-visible:outline-none">
               <span aria-hidden="true" className="absolute inset-y-2 left-0 w-[2px] rounded-full opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100" style={{ background: k.color, boxShadow: `0 0 10px ${k.color}` }} />
               {l.kind === 'page' && l.page ? <PageAvatar page={l.page} size="h-5 w-5" badge="" /> : <RowIcon className="h-5 w-5 shrink-0" style={{ color: k.color }} />}
               <span className="min-w-0 flex-1">
                 <span className="block truncate text-[13px] text-ink">{l.label}</span>
-                <span className={`block truncate font-mono text-[10px] ${bad ? 'text-down' : 'text-mut'}`}>{bad || (l.kind === 'page' && l.page ? PLATFORMS[l.page.platform]?.label : (l.kind === 'wallet' || l.kind === 'treasury') && ADDR.test(l.address) ? shortAddr(l.address) : k.label.toLowerCase())}</span>
+                <span className={`block truncate font-mono text-[10px] ${bad ? 'text-down' : 'text-mut'}`}>{bad || (l.kind === 'page' && l.page ? PLATFORMS[l.page.platform]?.label : (l.kind === 'wallet' || l.kind === 'treasury') && validAddr(chain, l.address) ? shortAddr(l.address) : k.label.toLowerCase())}</span>
               </span>
-              {l.asset ? <StockLogo address={l.asset} meta={meta?.[l.asset]} size="h-4 w-4" text="text-[5px]" /> : null}
+              {shown ? <StockLogo address={shown} meta={meta?.[shown]} size="h-4 w-4" text="text-[5px]" /> : null}
               <span className="figure w-12 text-right text-sm text-cyan-500">{sharePct(l.shareBps)}%</span>
               <Arrow className="h-3 w-3 shrink-0 text-mut opacity-0 transition-opacity group-hover:opacity-100" />
             </button>
@@ -705,7 +863,7 @@ function RoutingSummary({ draft, meta, select, data }) {
   );
 }
 
-function Cycles({ logs, meta, onClose }) {
+function Cycles({ logs, meta, onClose, chain = 'robinhood' }) {
   return (
     <div className={`frame absolute bottom-4 left-4 z-20 flex max-h-[60%] w-[440px] max-w-[calc(100%-2rem)] flex-col overflow-hidden shadow-soft ${floatGlass}`}>
       <div className="flex shrink-0 items-center justify-between border-b border-white/[0.07] px-4 py-3"><span className="label">Recent cycles</span><button type="button" onClick={onClose} aria-label="Close" className="flex h-6 w-6 items-center justify-center rounded-full text-mut transition-colors hover:bg-white/[0.06] hover:text-ink"><Close className="h-3.5 w-3.5" /></button></div>
@@ -726,13 +884,13 @@ function Cycles({ logs, meta, onClose }) {
                 </span>
               </div>
               <div className="mt-1.5 space-y-1 text-mut">
-                {paid && <div className="flex items-center gap-1.5"><StockLogo address={l.reward_token_used} meta={{ symbol: r.symbol }} size="h-4 w-4" text="text-[6px]" /><span className="font-mono tabular-nums text-ink">{fmtNum(units(l.total_airdropped, meta[l.reward_token_used]?.decimals ?? 18))} {r.symbol}</span> to {l.holder_count} holders</div>}
+                {paid && <div className="flex items-center gap-1.5"><StockLogo address={l.reward_token_used} meta={{ symbol: r.symbol }} size="h-4 w-4" text="text-[6px]" /><span className="font-mono tabular-nums text-ink">{fmtNum(units(l.total_airdropped, decimalsOf(l.reward_token_used, meta, chain)))} {r.symbol}</span> to {l.holder_count} holders</div>}
                 {(l.legs || []).map((x, i) => {
                   const LegIcon = KIND[x.kind]?.icon || Wallet;
                   return (
                     <div key={i} className={`flex items-center gap-1.5 ${x.failed ? 'text-down' : ''}`}>
                       <LegIcon className="h-4 w-4 shrink-0" style={x.failed ? undefined : { color: KIND[x.kind]?.color }} />
-                      {x.failed ? <span className="min-w-0">{x.label}: {x.failed}</span> : <span className="font-mono tabular-nums text-ink">{fmtNum(units(x.output?.amount, x.output?.decimals ?? 18))} {x.output?.symbol || ''}</span>}
+                      {x.failed ? <span className="min-w-0">{x.label}: {x.failed}</span> : <span className="font-mono tabular-nums text-ink">{fmtNum(units(x.output?.amount, x.output?.decimals ?? (chain === 'solana' ? decimalsOf(x.output?.token, meta, chain) : 18)))} {x.output?.symbol || ''}</span>}
                       {!x.failed && x.page ? <span className="inline-flex min-w-0 items-center gap-1">to <PlatformIcon platform={x.page.platform} className="h-3 w-3 shrink-0" /><Link href={pagePath(x.page.platform, x.page.handle)} target="_blank" className="truncate font-medium text-hood-600 hover:underline">{pageName(x.page.platform, x.page.handle)}</Link></span> : null}
                     </div>
                   );
@@ -756,16 +914,25 @@ const TOUR = [
   { title: 'Actions: your Telegram', body: 'The dashed node on the right is what happens off-chain: dividend receipts and burn alerts posted in your group. Click it to bind a group with one command.', pos: 'right-[26%] top-[50%]' },
   { title: 'Save, then let it run', body: 'Save routing writes the policy. Run now fires a cycle immediately. Cycles shows every payout with its receipt. You can change anything, any time.', pos: 'right-[6%] top-[12%]' },
 ];
-function Tour({ onDone }) {
+// The same tour for a coin on Solana: pump.fun fees, SOL, xStocks, receipts only.
+const SOL_TOUR = [
+  { ...TOUR[0], body: 'Each cycle collects your coin\'s pump.fun creator fees into this creator wallet, keeps 0.02 SOL for network fees and routes the rest on your schedule. Click the node to see holdings, schedule and the Telegram link.' },
+  { ...TOUR[1], body: 'Each card is a destination with a share of every cycle. Holders is the dividend. Click a leg to change its share, its destination and the asset it is paid in: SOL, an xStock, or any token by mint.' },
+  { ...TOUR[2], body: 'A page on the internet (paste the link of a YouTube channel, a GitHub account, a domain), a partner wallet, a buyback and burn, a treasury in an xStock. Add as many as you like; shares must add up to 100%.' },
+  { ...TOUR[3], body: 'The dashed node on the right is what happens off-chain: dividend receipts posted in your group. Click it to see how to bind a group.' },
+  TOUR[4],
+];
+function Tour({ onDone, chain = 'robinhood' }) {
   const [i, setI] = useState(0);
-  const step = TOUR[i];
+  const steps = chain === 'solana' ? SOL_TOUR : TOUR;
+  const step = steps[i];
   return (
     <div className="pointer-events-none absolute inset-0 z-40">
       <div className="pointer-events-auto absolute inset-0 bg-[rgba(5,7,12,0.66)] backdrop-blur-[2px]" onClick={onDone} />
       <div className={`frame pointer-events-auto absolute w-[360px] shadow-glow reveal-pop ${floatGlass} ${step.pos}`}>
         <div className="flex items-center justify-between gap-3 border-b border-white/[0.07] px-4 py-3">
           <span className="label text-cyan-500">Quick tour</span>
-          <span className="flex items-center gap-1" aria-label={`Step ${i + 1} of ${TOUR.length}`}>{TOUR.map((_, n) => <span key={n} className={`h-1 w-4 rounded-full transition-all ${n <= i ? 'beam shadow-[0_0_6px_rgba(47,168,255,0.6)]' : 'bg-white/10'}`} />)}</span>
+          <span className="flex items-center gap-1" aria-label={`Step ${i + 1} of ${steps.length}`}>{steps.map((_, n) => <span key={n} className={`h-1 w-4 rounded-full transition-all ${n <= i ? 'beam shadow-[0_0_6px_rgba(47,168,255,0.6)]' : 'bg-white/10'}`} />)}</span>
         </div>
         <div className="px-4 py-4">
           <div className="font-display text-lg font-medium tracking-[-0.02em] text-ink">{step.title}</div>
@@ -773,7 +940,7 @@ function Tour({ onDone }) {
         </div>
         <div className="flex items-center justify-between border-t border-white/[0.07] px-4 py-3">
           <button type="button" onClick={onDone} className="text-xs text-mut hover:text-ink">Skip</button>
-          <Button className="!px-3.5 !py-1.5 text-xs" onClick={() => (i + 1 < TOUR.length ? setI(i + 1) : onDone())}>{i + 1 < TOUR.length ? 'Next' : 'Got it'}{i + 1 < TOUR.length && <Arrow className="h-3 w-3" />}</Button>
+          <Button className="!px-3.5 !py-1.5 text-xs" onClick={() => (i + 1 < steps.length ? setI(i + 1) : onDone())}>{i + 1 < steps.length ? 'Next' : 'Got it'}{i + 1 < steps.length && <Arrow className="h-3 w-3" />}</Button>
         </div>
       </div>
     </div>
@@ -789,6 +956,9 @@ function StudioInner({ data, refresh, onLogout, onSwitchWallet, demo = false, on
   }, [demo, setup]);
   const endTour = () => { setTour(false); try { localStorage.setItem('delta:tour-done', '1'); } catch { /* ignore */ } };
   const { config, assets, logs, meta, user } = data;
+  // Everything the creator sees and writes follows the coin's chain: Solana or Robinhood Chain.
+  const chain = chainOfData(data);
+  const sol = chain === 'solana';
   const toast = useToast();
   const src = meta[config.source_token_address] || {};
   const initial = useMemo(() => draftFromData(data), [data]);
@@ -805,7 +975,7 @@ function StudioInner({ data, refresh, onLogout, onSwitchWallet, demo = false, on
   useEffect(() => { setDraft((d) => (JSON.stringify(stripPos(d)) === initialKey ? initial : d)); }, [initialKey, initial]); // refreshes keep the draft when dirty
 
   const total = totalBps(draft.legs);
-  const problems = draft.legs.map(legProblem).filter(Boolean);
+  const problems = draft.legs.map((l) => legProblem(l, chain)).filter(Boolean);
   const canSave = dirty && total === 10000 && problems.length === 0 && draft.legs.length > 0;
 
   // React Flow owns node positions while dragging (no re-render of node contents per frame,
@@ -817,9 +987,9 @@ function StudioInner({ data, refresh, onLogout, onSwitchWallet, demo = false, on
     setNodes((prev) => {
       const pos = new Map(prev.map((n) => [n.id, n.position]));
       return [
-        { id: SOURCE_ID, type: 'source', position: pos.get(SOURCE_ID) || draft.sourcePos, data: { src, config, assets, selected: selected === SOURCE_ID }, draggable: true },
-        ...draft.legs.map((leg) => ({ id: leg.key, type: 'leg', position: pos.get(leg.key) || { x: leg.posX, y: leg.posY }, data: { leg, meta, sourceSymbol: src.symbol, source: { address: config.source_token_address, meta: src }, selected: selected === leg.key, notify: leg.kind === 'holders' ? Boolean(data.telegram?.receiptsChatId) : leg.kind === 'burn' ? Boolean(data.telegram?.burnAlerts?.length) : false } })),
-        { id: TG_ID, type: 'action', position: pos.get(TG_ID) || { x: Math.max(ACTION_X, ...draft.legs.map((l) => l.posX + 330)), y: draft.legs.length ? draft.legs.reduce((s, l) => s + l.posY, 0) / draft.legs.length : 30 }, data: { telegram: data.telegram, sourceSymbol: src.symbol, selected: selected === TG_ID }, draggable: true },
+        { id: SOURCE_ID, type: 'source', position: pos.get(SOURCE_ID) || draft.sourcePos, data: { src, config, assets, chain, selected: selected === SOURCE_ID }, draggable: true },
+        ...draft.legs.map((leg) => ({ id: leg.key, type: 'leg', position: pos.get(leg.key) || { x: leg.posX, y: leg.posY }, data: { leg, meta, chain, sourceSymbol: src.symbol, source: { address: config.source_token_address, meta: src }, selected: selected === leg.key, notify: leg.kind === 'holders' ? Boolean(data.telegram?.receiptsChatId) : leg.kind === 'burn' && !sol ? Boolean(data.telegram?.burnAlerts?.length) : false } })),
+        { id: TG_ID, type: 'action', position: pos.get(TG_ID) || { x: Math.max(ACTION_X, ...draft.legs.map((l) => l.posX + 330)), y: draft.legs.length ? draft.legs.reduce((s, l) => s + l.posY, 0) / draft.legs.length : 30 }, data: { telegram: data.telegram, sourceSymbol: src.symbol, chain, selected: selected === TG_ID }, draggable: true },
       ];
     });
   }, [contentSig]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -834,11 +1004,12 @@ function StudioInner({ data, refresh, onLogout, onSwitchWallet, demo = false, on
   }, [posSig]); // eslint-disable-line react-hooks/exhaustive-deps
   const edges = useMemo(() => [
     ...draft.legs.map((leg) => ({ id: `e-${leg.key}`, source: SOURCE_ID, target: leg.key, type: 'share', data: { shareBps: leg.shareBps, color: KIND[leg.kind].color, active: demo || setup ? true : Boolean(config.is_active) } })),
-    ...draft.legs.filter((l) => l.kind === 'holders' || l.kind === 'burn').map((leg) => ({
+    // Group burn alerts run on Robinhood Chain only: on Solana the burn leg posts nothing.
+    ...draft.legs.filter((l) => l.kind === 'holders' || (l.kind === 'burn' && !sol)).map((leg) => ({
       id: `n-${leg.key}`, source: leg.key, target: TG_ID, type: 'notify',
       data: { label: leg.kind === 'burn' ? 'burn alert' : 'receipt', active: leg.kind === 'burn' ? Boolean(data.telegram?.burnAlerts?.length) : Boolean(data.telegram?.receiptsChatId) },
     })),
-  ], [draft.legs, config.is_active, demo, setup, data.telegram]);
+  ], [draft.legs, config.is_active, demo, setup, data.telegram, sol]);
 
   const onNodesChange = useCallback((changes) => onNodesChangeRF(changes.filter((c) => c.type !== 'remove')), [onNodesChangeRF]);
   const onNodeDragStop = useCallback((_, node) => {
@@ -857,7 +1028,10 @@ function StudioInner({ data, refresh, onLogout, onSwitchWallet, demo = false, on
       const legs = d.legs.map((l) => (biggest && l.key === biggest.key && l.shareBps >= share ? { ...l, shareBps: l.shareBps - share } : l));
       const taken = biggest && biggest.shareBps >= share;
       const ys = legs.map((l) => l.posY);
-      return { ...d, legs: [...legs, { key, kind, shareBps: taken ? share : 0, address: '', asset: kind === 'page' ? ZERO : '', label: kind === 'wallet' ? 'Partner wallet' : KIND[kind].label, posX: LEG_X, posY: (ys.length ? Math.max(...ys) : -LEG_GAP + 30) + LEG_GAP, ...(kind === 'page' ? { page: null, pageInput: '' } : {}) }] };
+      // A new page is paid in the native coin (ETH on Robinhood Chain, SOL in kind on Solana). On Solana a treasury
+      // starts in SPYx and a holders leg in the fixed reward, which the engine pays when the leg names nothing.
+      const asset = sol ? (kind === 'treasury' ? SPYX || '' : kind === 'holders' && d.reward.reward !== 'SOL' ? d.reward.reward : '') : kind === 'page' ? ZERO : '';
+      return { ...d, legs: [...legs, { key, kind, shareBps: taken ? share : 0, address: '', asset, label: kind === 'wallet' ? 'Partner wallet' : KIND[kind].label, posX: LEG_X, posY: (ys.length ? Math.max(...ys) : -LEG_GAP + 30) + LEG_GAP, ...(kind === 'page' ? { page: null, pageInput: '' } : {}) }] };
     });
     setSelected(key);
   }
@@ -877,7 +1051,13 @@ function StudioInner({ data, refresh, onLogout, onSwitchWallet, demo = false, on
     setBusy('save');
     try {
       const s = parseSchedule(draft.schedule.schedule);
-      const body = {
+      const body = sol ? {
+        // Solana: addresses and mints exactly as typed (base58 is case-sensitive). In kind ('' → null) is SOL; a burn has no asset.
+        legs: draft.legs.map((l, i) => ({ kind: l.kind, shareBps: l.shareBps, address: l.address || null, asset: l.kind === 'burn' ? null : l.asset || null, label: l.label, posX: l.posX, posY: l.posY, sortOrder: i, ...(l.kind === 'page' ? { page: { platform: l.page.platform, handle: l.page.handle } } : {}) })),
+        // One reward: 'SOL', an xStock mint or any mint. Rotating modes, loyalty and the LP fee source are Robinhood Chain only, so they are not sent.
+        reward_mode: 'fixed', basket: null, reward: draft.reward.reward || 'SOL',
+        ...s, market_hours_only: draft.schedule.marketHoursOnly,
+      } : {
         legs: draft.legs.map((l, i) => ({ kind: l.kind, shareBps: l.shareBps, address: l.address || null, asset: l.asset || null, label: l.label, posX: l.posX, posY: l.posY, sortOrder: i, ...(l.kind === 'page' ? { page: { platform: l.page.platform, handle: l.page.handle } } : {}) })),
         reward_mode: draft.reward.rewardMode, basket: draft.reward.rewardMode === 'portfolio' ? draft.reward.basket : null,
         ...(draft.reward.rewardMode === 'fixed' ? { reward: draft.reward.reward } : {}),
@@ -913,7 +1093,7 @@ function StudioInner({ data, refresh, onLogout, onSwitchWallet, demo = false, on
         toast(kind === 'resume' ? 'Resumed.' : 'Paused. No cycles until you resume.');
         refresh();
       } else if (kind === 'delete') {
-        if (!window.confirm('Delete this policy? The bot loses access to the dev wallet. Withdraw its funds first.')) return;
+        if (!window.confirm(sol ? `Delete this policy? Cycles stop and ${BRAND} deletes its copy of the creator wallet key. The wallet stays yours.` : 'Delete this policy? The bot loses access to the dev wallet. Withdraw its funds first.')) return;
         const res = await fetch('/api/app/config', { method: 'DELETE' });
         if (!res.ok) throw new Error((await res.json()).error);
         toast('Deleted.');
@@ -960,7 +1140,7 @@ function StudioInner({ data, refresh, onLogout, onSwitchWallet, demo = false, on
           <RunBadge active={config.is_active} />
           {config.is_active && <div><div className="label !text-[9.5px]">Next cycle</div><div className="figure text-[15px] leading-tight text-cyan-500"><Countdown intervalMinutes={config.interval_minutes} scheduleKind={config.schedule_kind} /></div></div>}
           <div className="hidden xl:block"><div className="label !text-[9.5px]">Schedule</div><div className="text-xs leading-tight text-ink">{config.scheduleLabel}</div></div>
-          {assets && <div className="hidden xl:block"><div className="label !text-[9.5px]">Dev wallet</div><div className="figure text-[15px] leading-tight text-ink">{fmtUsd(assets.totalUsd || 0)}</div></div>}
+          {assets && <div className="hidden xl:block"><div className="label !text-[9.5px]">{sol ? 'Creator wallet' : 'Dev wallet'}</div><div className="figure text-[15px] leading-tight text-ink">{fmtUsd(assets.totalUsd || 0)}</div></div>}
           {data.yield?.apy ? <div className="hidden 2xl:block"><div className="label !text-[9.5px]">Yield</div><div className="figure text-[15px] leading-tight text-ink">{data.yield.apy.toFixed(1)}%</div></div> : null}
         </div>
         <div className="flex items-center lg:hidden"><RunBadge active={config.is_active} /></div>
@@ -978,7 +1158,7 @@ function StudioInner({ data, refresh, onLogout, onSwitchWallet, demo = false, on
                     return (
                       <button key={k} type="button" onClick={() => addLeg(k)} className={`group flex w-full items-center gap-3 rounded-xl px-2.5 py-2 text-left transition-colors hover:bg-white/[0.05] focus-visible:bg-white/[0.05] focus-visible:outline-none ${taken ? 'opacity-50' : ''}`}>
                         <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl" style={{ background: alpha(v.color, 0.1) }}><KindIcon className="h-5 w-5" style={{ color: v.color }} /></span>
-                        <span className="min-w-0 flex-1"><span className="block text-[13px] font-medium text-ink">{v.label}{taken && <span className="ml-1.5 font-mono text-[10px] text-mut">already on the canvas</span>}</span><span className="block text-[11px] leading-snug text-mut">{v.hint}</span></span>
+                        <span className="min-w-0 flex-1"><span className="block text-[13px] font-medium text-ink">{v.label}{taken && <span className="ml-1.5 font-mono text-[10px] text-mut">already on the canvas</span>}</span><span className="block text-[11px] leading-snug text-mut">{kindHint(k, chain)}</span></span>
                         {k === 'page' ? <span className="flex shrink-0 items-center gap-1"><PlatformIcon platform="youtube" className="h-3 w-3" /><PlatformIcon platform="github" className="h-3 w-3" /><PlatformIcon platform="x" className="h-3 w-3" /></span> : <Plus className="h-3 w-3 shrink-0 text-mut opacity-0 transition-opacity group-hover:opacity-100" />}
                       </button>
                     );
@@ -1025,7 +1205,7 @@ function StudioInner({ data, refresh, onLogout, onSwitchWallet, demo = false, on
           </div>
         </div>
       )}
-      {tour && <Tour onDone={endTour} />}
+      {tour && <Tour onDone={endTour} chain={chain} />}
       {demo && (
         // The first thing a visitor must understand: this canvas is a sample, and one button makes it theirs.
         <div className="sample-bar relative flex shrink-0 flex-wrap items-center justify-between gap-x-6 gap-y-3 overflow-hidden border-b border-white/10 bg-white/[0.035] py-3.5 pl-6 pr-4">
@@ -1056,8 +1236,12 @@ function StudioInner({ data, refresh, onLogout, onSwitchWallet, demo = false, on
               className="!overflow-hidden !rounded-2xl !border-white/10 !bg-[rgba(9,12,19,0.84)] backdrop-blur-xl [&_.react-flow__controls-button:hover]:!bg-white/[0.06] [&_.react-flow__controls-button:hover]:!text-ink [&_.react-flow__controls-button]:!border-b-white/[0.07] [&_.react-flow__controls-button]:!bg-transparent [&_.react-flow__controls-button]:!text-mut" />
           </ReactFlow>
           {total !== 10000 && <div className="pointer-events-none absolute left-1/2 top-3 z-10 flex -translate-x-1/2 items-center gap-1.5 whitespace-nowrap rounded-full border border-down/40 bg-[rgba(5,7,12,0.88)] px-3.5 py-1.5 text-xs text-down shadow-[0_0_24px_-8px_rgba(255,92,51,0.55)] backdrop-blur-md"><Warning className="h-3.5 w-3.5" />Shares total <span className="font-mono tabular-nums">{(total / 100).toFixed(1)}%</span>. Adjust a leg or use Balance.</div>}
-          {problems.length > 0 && total === 10000 && <div className="pointer-events-none absolute left-1/2 top-3 z-10 flex -translate-x-1/2 items-center gap-1.5 whitespace-nowrap rounded-full border border-down/40 bg-[rgba(5,7,12,0.88)] px-3.5 py-1.5 text-xs text-down shadow-[0_0_24px_-8px_rgba(255,92,51,0.55)] backdrop-blur-md"><Warning className="h-3.5 w-3.5" />{problems.includes('needs a page') ? 'A page leg needs a link: paste it in the panel on the right.' : 'A wallet or treasury leg needs an address.'}</div>}
-          {showCycles && <Cycles logs={logs} meta={meta} onClose={() => setShowCycles(false)} />}
+          {problems.length > 0 && total === 10000 && <div className="pointer-events-none absolute left-1/2 top-3 z-10 flex -translate-x-1/2 items-center gap-1.5 whitespace-nowrap rounded-full border border-down/40 bg-[rgba(5,7,12,0.88)] px-3.5 py-1.5 text-xs text-down shadow-[0_0_24px_-8px_rgba(255,92,51,0.55)] backdrop-blur-md"><Warning className="h-3.5 w-3.5" />{problems.includes('needs a page') ? 'A page leg needs a link: paste it in the panel on the right.'
+            : problems.includes('needs a Solana address') ? 'This coin lives on Solana: a wallet or treasury leg needs a Solana address.'
+              : problems.includes('needs an address') ? (sol ? 'A wallet or treasury leg needs a Solana address.' : 'A wallet or treasury leg needs an address.')
+                : problems.includes('needs an xStock') ? 'The treasury holds an xStock: pick one in the panel on the right.'
+                  : 'A wallet or treasury leg needs an address.'}</div>}
+          {showCycles && <Cycles logs={logs} meta={meta} chain={chain} onClose={() => setShowCycles(false)} />}
           {/* Legend: the key of the map, set on the canvas like the key of a drawing */}
           <div className="pointer-events-none absolute bottom-4 right-16 z-10 hidden items-stretch divide-x divide-white/[0.07] overflow-hidden rounded-full border border-white/10 bg-[rgba(5,7,12,0.78)] backdrop-blur-md lg:flex">
             {Object.entries(KIND).map(([k, v]) => { const KindIcon = v.icon; return <span key={k} className="flex items-center gap-1.5 px-3 py-1.5 font-mono text-[9.5px] uppercase tracking-[0.14em] text-mut"><KindIcon className="h-3.5 w-3.5" style={{ color: v.color, filter: `drop-shadow(0 0 4px ${alpha(v.color, 0.6)})` }} />{v.label}</span>; })}
@@ -1068,8 +1252,8 @@ function StudioInner({ data, refresh, onLogout, onSwitchWallet, demo = false, on
         <aside className="max-h-[50%] w-full shrink-0 overflow-y-auto border-t border-white/10 bg-white/[0.025] md:max-h-none md:w-[320px] md:border-l md:border-t-0 lg:w-[360px]">
           {selected === SOURCE_ID ? <SourceInspector data={data} draft={draft} setDraft={setDraft} act={act} busy={busy} tg={tg} onRevealKey={onRevealKey} />
             : selected === TG_ID ? <ActionInspector data={data} act={act} busy={busy} tg={tg} demo={demo} />
-            : selectedLeg ? <LegInspector key={selectedLeg.key} leg={selectedLeg} draft={draft} setDraft={setDraft} meta={meta} sourceSymbol={src.symbol} onRemove={() => removeLeg(selectedLeg.key)} />
-            : <RoutingSummary draft={draft} meta={meta} select={setSelected} data={setup ? null : data} />}
+            : selectedLeg ? <LegInspector key={selectedLeg.key} leg={selectedLeg} draft={draft} setDraft={setDraft} meta={meta} sourceSymbol={src.symbol} chain={chain} onRemove={() => removeLeg(selectedLeg.key)} />
+            : <RoutingSummary draft={draft} meta={meta} select={setSelected} data={setup ? null : data} chain={chain} />}
         </aside>
       </div>
     </div>

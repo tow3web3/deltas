@@ -3,6 +3,8 @@
 import { sessionUser } from '../../../../lib/session';
 import { getConfigForUser, recentLogsForConfig, getLegs } from '../../../../lib/appQueries';
 import { walletAssets } from '../../../../lib/walletAssets';
+import { solWalletAssets } from '../../../../lib/solana';
+import { chainOf, normAddress } from '../../../../lib/chains';
 import { fetchTokenMeta } from '../../../../lib/tokenMeta';
 import { tokenYield } from '../../../../lib/yield';
 import { scheduleLabel } from '../../../../lib/queries';
@@ -16,6 +18,14 @@ function publicConfig(c) {
   const { dev_wallet_encrypted, ...rest } = c;
   void dev_wallet_encrypted;
   return { ...rest, scheduleLabel: scheduleLabel(c) };
+}
+
+// The engine keeps this much SOL in the creator wallet for network fees.
+const SOL_RESERVE = 0.02;
+/** The creator wallet on Solana: SOL (with what a cycle may route) and every token, priced. */
+async function solCreatorAssets(address) {
+  const r = await solWalletAssets(address, 0n);
+  return { ...r, assets: r.assets.map((a) => (a.isNative ? { ...a, spendable: Math.max(0, a.amount - SOL_RESERVE) } : a)) };
 }
 
 export async function GET() {
@@ -32,7 +42,7 @@ export async function GET() {
     if (config) {
       try {
         const sql = getSql();
-        const burnAlerts = await sql`SELECT chat_id::text AS chat_id, chat_title, thread_id FROM burn_alert_chats WHERE token = ${config.source_token_address.toLowerCase()}`;
+        const burnAlerts = await sql`SELECT chat_id::text AS chat_id, chat_title, thread_id FROM burn_alert_chats WHERE token = ${normAddress(config.source_token_address)}`;
         const receiptsChatId = config.announce_chat_id ? String(config.announce_chat_id) : null;
         telegram = {
           receiptsChatId,
@@ -41,7 +51,7 @@ export async function GET() {
         };
       } catch { telegram = { receiptsChatId: config.announce_chat_id ? String(config.announce_chat_id) : null, receiptsTitle: null, burnAlerts: [] }; }
       const [a, l, lg] = await Promise.all([
-        walletAssets(config.dev_wallet_public, BigInt(config.gas_reserve_wei || 0)).catch((e) => ({ error: e.message, assets: [] })),
+        (config.chain === 'solana' ? solCreatorAssets(config.dev_wallet_public) : walletAssets(config.dev_wallet_public, BigInt(config.gas_reserve_wei || 0))).catch((e) => ({ error: e.message, assets: [] })),
         recentLogsForConfig(config.id),
         getLegs(config.id),
       ]);
@@ -52,7 +62,7 @@ export async function GET() {
       yieldStats = await tokenYield(config.source_token_address, meta[config.source_token_address]?.marketCap ?? null).catch(() => null);
     }
     return Response.json({
-      user: { id: user.id, wallet: user.wallet_address, telegramLinked: Boolean(user.telegram_id), telegramUsername: user.username || null },
+      user: { id: user.id, wallet: user.wallet_address, chain: chainOf(user.wallet_address) || 'solana', telegramLinked: Boolean(user.telegram_id), telegramUsername: user.username || null },
       config: publicConfig(config),
       legs,
       telegram,

@@ -10,7 +10,7 @@ export const dynamic = 'force-dynamic';
 // fixed pages.
 export default async function sitemap() {
   const now = new Date();
-  const fixed = [['/', 1, 'daily'], ['/pages', 0.9, 'hourly'], ['/claim', 0.9, 'monthly'], ['/guide', 0.8, 'monthly'], ['/stocks', 0.6, 'weekly'], ['/wallet', 0.5, 'monthly'], ['/vote', 0.4, 'weekly'], ['/missions', 0.3, 'monthly'], ['/privacy', 0.2, 'yearly'], ['/terms', 0.2, 'yearly']]
+  const fixed = [['/', 1, 'daily'], ['/pages', 0.9, 'hourly'], ['/claim', 0.9, 'monthly'], ['/guide', 0.8, 'monthly'], ['/stocks', 0.6, 'weekly'], ['/wallet', 0.5, 'monthly'], ['/privacy', 0.2, 'yearly'], ['/terms', 0.2, 'yearly']]
     .map(([path, priority, changeFrequency]) => ({ url: `${SITE_URL}${path}`, lastModified: now, changeFrequency, priority }));
   const [pages, coins] = await Promise.all([topPages({ limit: 100 }).catch(() => []), getActiveTokens().catch(() => [])]);
   return [

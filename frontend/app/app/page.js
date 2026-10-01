@@ -10,6 +10,8 @@ import Studio from '../../components/app/Studio';
 import { ToastProvider, useToast } from '../../components/app/ui';
 import { CaretDown, Convert, SignOut } from '../../components/Icons';
 import { useWallet } from '../../lib/useWallet';
+import { useSolWallet, NO_SOL_WALLET } from '../../lib/useSolWallet';
+import { CHAINS, chainOf, normAddress } from '../../lib/chains';
 import { signIn, signOut, revealDevKey } from '../../lib/authClient';
 
 /** Header chip: the signed-in wallet, with Switch wallet and Disconnect. */
@@ -25,7 +27,7 @@ function WalletMenu({ wallet, onSwitch, onLogout }) {
       {open && (
         <div className="frame absolute right-0 top-full z-50 mt-1.5 w-60 shadow-soft">
           <div className="border-b border-line px-3.5 py-3">
-            <div className="label">Signed in as</div>
+            <div className="label">Signed in as{CHAINS[chainOf(wallet)] ? ` · ${CHAINS[chainOf(wallet)].label}` : ''}</div>
             <div className="mt-1.5 break-all font-mono text-[11px] leading-relaxed text-ink">{wallet}</div>
           </div>
           <div className="divide-y divide-line/70">
@@ -39,6 +41,7 @@ function WalletMenu({ wallet, onSwitch, onLogout }) {
 }
 
 function AppShell({ children, wallet, studio, onSwitch, onLogout, onConnect, connecting }) {
+  // Connect opens a Solana wallet; a Robinhood Chain wallet stays one click away.
   return (
     <div className={studio ? 'flex h-screen flex-col overflow-hidden' : ''}>
       {!studio && <TickerTape />}
@@ -51,7 +54,15 @@ function AppShell({ children, wallet, studio, onSwitch, onLogout, onConnect, con
           <div className="flex items-center gap-4 text-[13px]">
             <Link href="/stocks" className="hidden text-mut transition-colors hover:text-ink sm:inline">Stocks</Link>
             <Link href="/#check" className="hidden text-mut transition-colors hover:text-ink sm:inline">Token check</Link>
-            {wallet ? <WalletMenu wallet={wallet} onSwitch={onSwitch} onLogout={onLogout} /> : <button type="button" onClick={onConnect} disabled={connecting} className="btn-primary !py-1.5 text-xs">{connecting ? 'Check your wallet…' : 'Connect wallet'}</button>}
+            {wallet ? <WalletMenu wallet={wallet} onSwitch={onSwitch} onLogout={onLogout} /> : (
+              <span className="flex items-center gap-2.5">
+                <button type="button" onClick={() => onConnect('robinhood')} disabled={connecting} className="hidden font-mono text-[10.5px] uppercase tracking-[0.14em] text-dim transition-colors hover:text-ink disabled:opacity-50 sm:inline" title="MetaMask, Rabby">Robinhood Chain</button>
+                <button type="button" onClick={() => onConnect('solana')} disabled={connecting} className="btn-primary !py-1.5 text-xs">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src="/sol.png" alt="" className="h-3.5 w-3.5 rounded-full" />{connecting ? 'Check your wallet…' : 'Connect wallet'}
+                </button>
+              </span>
+            )}
           </div>
         </div>
       </nav>
@@ -67,7 +78,13 @@ export default function AppPage() {
 
 function AppInner() {
   const [state, setState] = useState({ loading: true, data: null });
-  const injected = useWallet();
+  const evm = useWallet();
+  const sol = useSolWallet();
+  // The wallet in use: the one signed in, else the one being connected (Solana unless asked otherwise).
+  const [picked, setPicked] = useState('solana');
+  const signedChain = chainOf(state.data?.user?.wallet);
+  const walletFor = (chain) => (chain === 'robinhood' ? evm : sol);
+  const injected = walletFor(signedChain || picked);
   const toast = useToast();
 
   const load = useCallback(async () => {
@@ -96,12 +113,15 @@ function AppInner() {
 
   const [connecting, setConnecting] = useState(false);
   // Connect: pick an account in the extension, sign the login message, load the real dashboard.
-  async function connect() {
+  async function connect(chain = 'solana') {
+    const c = chain === 'robinhood' ? 'robinhood' : 'solana';
+    const w = walletFor(c);
+    setPicked(c);
     setConnecting(true);
     try {
-      const addr = injected.address || (await injected.connect());
-      if (!addr) throw new Error(injected.error || 'No wallet found. Install MetaMask or Rabby, or open this page in your wallet browser.');
-      await signIn(injected, addr);
+      const addr = w.address || (await w.connect());
+      if (!addr) throw new Error(w.error || (c === 'solana' ? `${NO_SOL_WALLET} Or open this page in your wallet's browser.` : 'No wallet found. Install MetaMask or Rabby, or open this page in your wallet browser.'));
+      await signIn(w, addr);
       toast(`Signed in as ${addr.slice(0, 6)}…${addr.slice(-4)}`);
       await load();
     } catch (e) {
@@ -116,7 +136,7 @@ function AppInner() {
     try {
       const addr = await injected.switchAccount();
       if (!addr) throw new Error(injected.error || 'No account selected');
-      if (state.data?.user?.wallet && addr.toLowerCase() === state.data.user.wallet.toLowerCase()) { toast('Same wallet selected.'); return; }
+      if (state.data?.user?.wallet && normAddress(addr) === state.data.user.wallet) { toast('Same wallet selected.'); return; }
       await signOut();
       await signIn(injected, addr);
       toast(`Signed in as ${addr.slice(0, 6)}…${addr.slice(-4)}`);
@@ -133,7 +153,7 @@ function AppInner() {
         {state.loading ? (
           <div className="flex min-h-[50vh] items-center justify-center gap-2.5" role="status"><span className="h-3.5 w-3.5 animate-spin rounded-full border border-line border-t-hood-500" /><span className="label">Loading your routing</span></div>
         ) : !state.data?.user ? (
-          <Studio data={DEMO_DATA} demo onConnect={connect} refresh={() => {}} onLogout={() => {}} />
+          <Studio data={DEMO_DATA} demo onConnect={() => connect('solana')} refresh={() => {}} onLogout={() => {}} />
         ) : !state.data.config ? (
           <Studio data={blankData(state.data.user)} setup onCreated={load} refresh={load} onLogout={logout} onSwitchWallet={switchWallet} />
         ) : (

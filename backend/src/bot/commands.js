@@ -788,7 +788,8 @@ export async function handleAnnounce(ctx) {
 
   // In a group, an admin can name the coin: /announce <contract address>. That
   // covers policies created on the canvas, which have no Telegram account behind them.
-  if (chat.type !== 'private' && isAddress(arg || '')) {
+  // A Solana mint works as well as a 0x address.
+  if (chat.type !== 'private' && (isAddress(arg || '') || isSolAddress(arg || ''))) {
     if (!(await isGroupAdmin(ctx))) return ctx.reply('Only a group admin can do that.');
     const byToken = await db.getBotConfigBySourceToken(arg);
     if (!byToken) return ctx.reply('No active policy for that coin yet. Create one on the canvas or with /setup first.');

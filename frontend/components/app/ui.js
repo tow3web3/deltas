@@ -4,7 +4,9 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState } 
 import StockLogo from '../StockLogo';
 import TokenCard from './TokenCard';
 import { Bell, CaretDown, Chart, Check, Coins, OpeningBell, Timer, Warning } from '../Icons';
-import { STOCKS, LIQUID_TICKERS, getStock } from '../../lib/stocks';
+import { STOCKS, LIQUID_TICKERS, getStock, SOL_MINT } from '../../lib/stocks';
+import { XSTOCKS, FEATURED_XSTOCKS, XSTOCKS_TOTAL, getXStock } from '../../lib/xstocks';
+import { isEvmAddress, isSolAddress } from '../../lib/chains';
 
 // The beam, running down instead of across: the lit edge of a toast.
 const BEAM_DOWN = 'linear-gradient(180deg, #2FA8FF 0%, #5FE3FF 50%, #7B5CFF 100%)';
@@ -149,10 +151,18 @@ export function Slider({ label, value, min = 0, max = 100, step = 1, onChange, f
   );
 }
 
-/** Stock picker: search over the 195 tickers, plus ETH and a raw address. */
+/** Stock picker: search over the 195 tickers, plus ETH and a raw address (Robinhood Chain), or the xStocks, SOL and any mint (Solana). */
 const customCache = new Map();
+// A token the site must look up: a 0x token that is neither a stock nor ETH (stored lowercase),
+// or a Solana mint that is neither SOL nor a listed xStock (base58 is case-sensitive: kept as typed).
+const customKey = (address) => {
+  if (!address) return null;
+  if (/^0x[0-9a-fA-F]{40}$/.test(address)) return !getStock(address) && !/^0x0{40}$/i.test(address) ? address.toLowerCase() : null;
+  if (isSolAddress(address)) return address !== SOL_MINT && getXStock(address)?.mint !== address ? address : null;
+  return null;
+};
 export function useCustomToken(address) {
-  const key = address && /^0x[0-9a-fA-F]{40}$/.test(address) && !getStock(address) && !/^0x0{40}$/i.test(address) ? address.toLowerCase() : null;
+  const key = customKey(address);
   const [info, setInfo] = useState(key ? customCache.get(key) || null : null);
   useEffect(() => {
     if (!key) { setInfo(null); return; }
@@ -165,10 +175,11 @@ export function useCustomToken(address) {
   return info;
 }
 
-/** Research payload (/api/app/token) for any address, stocks and ETH included. Cached per address. */
+/** Research payload (/api/app/token) for any address, stocks and ETH included, or any Solana mint (SOL and xStocks included). Cached per address. */
 const researchCache = new Map();
 export function useTokenResearch(address) {
-  const key = address && /^0x[0-9a-fA-F]{40}$/.test(address) ? address.toLowerCase() : address === 'ETH' ? '0x0000000000000000000000000000000000000000' : null;
+  const key = address && /^0x[0-9a-fA-F]{40}$/.test(address) ? address.toLowerCase() : address === 'ETH' ? '0x0000000000000000000000000000000000000000'
+    : address === 'SOL' ? SOL_MINT : isSolAddress(address) ? address : null;
   const [info, setInfo] = useState(key ? researchCache.get(key) || null : null);
   useEffect(() => {
     if (!key) { setInfo(null); return; }
@@ -181,7 +192,16 @@ export function useTokenResearch(address) {
   return info;
 }
 
-export function StockPicker({ value, onChange, allowEth = true, allowAddress = true, compact = false }) {
+/**
+ * The asset picker of the chain the coin lives on. `chain` = 'robinhood' (default: Robinhood Stock
+ * Tokens, ETH as 'ETH', 0x tokens) or 'solana' (xStocks, SOL as SOL_MINT, any mint, case kept).
+ * `allowEth` allows the chain's native coin (ETH or SOL); `allowAddress` allows any token by address.
+ */
+export function StockPicker({ chain = 'robinhood', ...props }) {
+  return chain === 'solana' ? <SolanaStockPicker {...props} /> : <RobinhoodStockPicker {...props} />;
+}
+
+function RobinhoodStockPicker({ value, onChange, allowEth = true, allowAddress = true, compact = false }) {
   const [q, setQ] = useState('');
   const [open, setOpen] = useState(false);
   const [tab, setTab] = useState('stocks'); // stocks | custom
@@ -257,6 +277,97 @@ export function StockPicker({ value, onChange, allowEth = true, allowAddress = t
   );
 }
 
+/** What the Solana picker offers, in a few words. */
+const solOffer = (allowSol, allowMint) => (allowSol ? `SOL, an xStock${allowMint ? ', or any token by mint' : ''}` : `An xStock${allowMint ? ', or any token by mint' : ''}`);
+// The familiar xStocks first, in the order of the featured list; the rest keep their order.
+const xstockRank = (s) => { const i = FEATURED_XSTOCKS.findIndex((f) => f.ticker === s.ticker); return i < 0 ? FEATURED_XSTOCKS.length : i; };
+
+/** The Solana picker: SOL (SOL_MINT), the xStocks (by mint) and any mint Jupiter knows. Every value is a mint, as typed. */
+function SolanaStockPicker({ value, onChange, allowEth = true, allowAddress = true, compact = false }) {
+  const [q, setQ] = useState('');
+  const [open, setOpen] = useState(false);
+  const [tab, setTab] = useState('stocks'); // stocks | custom
+  const custom = useCustomToken(value);
+  const xs = value ? getXStock(value) : null;
+  const selected = !value ? null
+    : value === 'SOL' || value === SOL_MINT ? { symbol: 'SOL', name: 'Solana', address: SOL_MINT }
+      : xs ? { symbol: xs.symbol, name: xs.name, address: xs.mint }
+        : { symbol: custom?.symbol || `${value.slice(0, 6)}…`, name: custom?.name ? `${custom.name} · custom token` : 'Custom token', address: value, image: custom?.image || null };
+  const list = useMemo(() => {
+    const needle = q.trim().toLowerCase();
+    const base = XSTOCKS.filter((s) => !needle || s.ticker.toLowerCase().includes(needle) || s.symbol.toLowerCase().includes(needle) || s.name.toLowerCase().includes(needle));
+    return base.sort((a, b) => xstockRank(a) - xstockRank(b)).slice(0, compact ? 8 : 14);
+  }, [q, compact]);
+  useEffect(() => { if (!open) { setQ(''); setTab('stocks'); } }, [open]);
+  const typed = q.trim();
+  const isAddr = isSolAddress(typed);
+  const isEvm = isEvmAddress(typed);
+  useEffect(() => { if (isAddr && allowAddress) setTab('custom'); }, [isAddr, allowAddress]);
+  const probe = useTokenResearch(isAddr && allowAddress ? typed : null);
+  const total = XSTOCKS_TOTAL.toLocaleString('en-US');
+
+  return (
+    <div className="relative">
+      <button type="button" aria-expanded={open} onClick={() => setOpen((o) => !o)} className={`flex w-full items-center gap-3 rounded-xl border bg-black/30 px-3 py-2 text-left transition-colors hover:border-white/20 ${open ? 'border-cyan-500/60' : 'border-white/10'} ${focusCls}`}>
+        {selected ? <StockLogo address={selected.address} meta={{ symbol: selected.symbol, image: selected.image }} size="h-8 w-8" text="text-[9px]" /> : <span className="h-8 w-8 shrink-0 rounded-full border border-dashed border-white/15" />}
+        <span className="min-w-0 flex-1">
+          <span className="block font-mono text-[13px] font-medium text-ink">{selected ? selected.symbol : allowEth || allowAddress ? 'Pick a token' : 'Pick an xStock'}</span>
+          <span className="block truncate text-xs text-mut">{selected ? selected.name : solOffer(allowEth, allowAddress)}</span>
+        </span>
+        <CaretDown className={`h-3.5 w-3.5 shrink-0 text-mut transition-transform ${open ? 'rotate-180 text-cyan-500' : ''}`} />
+      </button>
+      {open && (
+        <div className="absolute left-0 right-0 top-full z-20 mt-1.5 min-w-[320px] overflow-hidden rounded-2xl border border-white/10 bg-[rgba(9,12,19,0.96)] shadow-soft backdrop-blur-xl">
+          {allowAddress && (
+            <div className="grid grid-cols-2 gap-1 border-b border-white/[0.07] p-1.5">
+              {[['stocks', Chart, allowEth ? 'SOL and xStocks' : 'xStocks'], ['custom', Coins, 'Any token, by mint']].map(([k, Icon, text]) => (
+                <button key={k} type="button" onClick={() => setTab(k)} className={`flex items-center justify-center gap-1.5 rounded-xl px-2 py-1.5 text-xs font-medium transition-colors ${tab === k ? segOn : segOff}`}>
+                  <Icon className={`h-3.5 w-3.5 ${tab === k ? 'text-cyan-500' : ''}`} />{text}
+                </button>
+              ))}
+            </div>
+          )}
+          {tab === 'custom' && allowAddress ? (
+            <div className="p-3">
+              <p className="mb-2 text-xs text-mut">Any Solana token by its mint: a memecoin, a partner token, one of the {total} xStocks, your own coin.</p>
+              <input autoFocus value={q} onChange={(e) => setQ(e.target.value.trim())} placeholder="Mint address" spellCheck={false} autoCapitalize="off" autoCorrect="off" autoComplete="off" className={inputCls} />
+              {isAddr ? (
+                <div className="mt-2">
+                  {probe?.loading || !probe ? <div className="flex items-center gap-2 px-2 py-3 text-xs text-mut"><span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white/10 border-t-cyan-500" /> Looking up {typed.slice(0, 10)}… on Jupiter</div>
+                    : probe.error ? <div className="px-2 py-3 text-xs text-down">{probe.error}</div>
+                    : <TokenCard token={probe} compact action={{ label: 'Use this token', onClick: () => { onChange(typed); setOpen(false); } }} />}
+                </div>
+              ) : isEvm ? <p className="mt-2 text-xs text-down">That is a Robinhood Chain address. This coin lives on Solana: paste a Solana mint.</p>
+                : q ? <p className="mt-2 text-xs text-mut">Keep typing: a mint is 32 to 44 letters and digits.</p> : null}
+            </div>
+          ) : (
+          <>
+          <input autoFocus value={q} onChange={(e) => setQ(e.target.value)} placeholder={allowAddress ? 'Search a ticker or a company, or paste a mint' : 'Search a ticker or a company'} spellCheck={false} autoCapitalize="off" autoCorrect="off" autoComplete="off" className="w-full border-b border-white/[0.07] bg-transparent px-3.5 py-2.5 text-[13px] text-ink outline-none placeholder:text-dim focus:border-cyan-500/50" />
+          <div className="max-h-[420px] overflow-y-auto p-1.5">
+            {allowEth && !q && (
+              <button type="button" onClick={() => { onChange(SOL_MINT); setOpen(false); }} className="flex w-full items-center gap-3 rounded-xl px-2.5 py-2 text-left transition-colors hover:bg-white/[0.05]">
+                <StockLogo address={SOL_MINT} size="h-6 w-6" text="text-[7px]" /><span className="w-16 font-mono text-[13px] font-medium text-ink">SOL</span><span className="min-w-0 flex-1 truncate text-xs text-mut">Solana, no conversion</span>
+              </button>
+            )}
+            {list.map((s) => (
+              <button key={s.mint} type="button" onClick={() => { onChange(s.mint); setOpen(false); }} className="flex w-full items-center gap-3 rounded-xl px-2.5 py-2 text-left transition-colors hover:bg-white/[0.05]">
+                <StockLogo address={s.mint} size="h-6 w-6" text="text-[7px]" />
+                <span className="w-16 font-mono text-[13px] font-medium text-ink">{s.symbol}</span>
+                <span className="min-w-0 flex-1 truncate text-xs text-mut">{s.name}</span>
+              </button>
+            ))}
+            {list.length === 0 && !isAddr && <div className="px-4 py-4 text-center text-xs text-mut">No xStock matches among the {XSTOCKS.length} listed here.{allowAddress ? ' Any of the others, or any token, goes by its mint in the "Any token" tab.' : ''}</div>}
+            {list.length === 0 && isAddr && !allowAddress && <div className="px-4 py-4 text-center text-xs text-mut">Pick an xStock from the list.</div>}
+          </div>
+          {allowAddress && !q && <div className="border-t border-white/[0.07] px-3.5 py-2 text-[11px] leading-snug text-mut">The {XSTOCKS.length} best known of the {total} xStocks Jupiter verifies. Any of them pays: paste its mint in the second tab.</div>}
+          </>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export const shortAddr = (a) => (a ? `${a.slice(0, 6)}…${a.slice(-4)}` : '');
 export const fmtUsd = (n) => `$${(n || 0).toLocaleString('en-US', { maximumFractionDigits: n >= 100 ? 0 : 2 })}`;
 export const fmtNum = (n, d = 4) => (n >= 1000 ? n.toLocaleString('en-US', { maximumFractionDigits: 0 }) : Number(n || 0).toFixed(n >= 1 ? 2 : d));
@@ -266,7 +377,13 @@ export const SCHEDULES = [
   { value: 'interval:5', label: '5 min', title: 'Every 5 minutes', icon: Timer }, { value: 'interval:30', label: '30 min', title: 'Every 30 minutes', icon: Timer }, { value: 'interval:60', label: 'Hourly', title: 'Every hour', icon: Timer },
   { value: 'closing_bell', label: 'Closing bell', title: '4:00 pm New York, weekdays', icon: Bell }, { value: 'opening_bell', label: 'Opening bell', title: '9:30 am New York, weekdays', icon: OpeningBell },
 ];
-export const scheduleValue = (c) => (c.schedule_kind === 'interval' ? `interval:${[5, 30, 60].includes(Number(c.interval_minutes)) ? c.interval_minutes : 5}` : c.schedule_kind);
+// Solana: every 1, 2, 5, 10, 30 or 60 minutes, or once a day at the closing bell.
+export const SOL_SCHEDULES = [
+  { value: 'interval:1', label: '1 min', title: 'Every minute', icon: Timer }, { value: 'interval:2', label: '2 min', title: 'Every 2 minutes', icon: Timer }, { value: 'interval:5', label: '5 min', title: 'Every 5 minutes', icon: Timer },
+  { value: 'interval:10', label: '10 min', title: 'Every 10 minutes', icon: Timer }, { value: 'interval:30', label: '30 min', title: 'Every 30 minutes', icon: Timer }, { value: 'interval:60', label: 'Hourly', title: 'Every hour', icon: Timer },
+  { value: 'closing_bell', label: 'Closing bell', title: '4:00 pm New York, weekdays', icon: Bell },
+];
+export const scheduleValue = (c) => (c.schedule_kind === 'interval' ? `interval:${(c.chain === 'solana' ? [1, 2, 5, 10, 30, 60] : [5, 30, 60]).includes(Number(c.interval_minutes)) ? c.interval_minutes : 5}` : c.schedule_kind);
 export const parseSchedule = (v) => (v.startsWith('interval:') ? { schedule_kind: 'interval', interval_minutes: Number(v.split(':')[1]) } : { schedule_kind: v, interval_minutes: 1440 });
 
 export const PRESETS = [
