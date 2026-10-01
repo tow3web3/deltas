@@ -7,6 +7,8 @@ import { isAddress } from '../chain/config.js';
 import { scheduleConfig } from '../scheduler/cron.js';
 import { executeBotConfig, busyConfigs } from '../scheduler/executor.js';
 import { sweepPage } from '../services/pages.js';
+import { sweepSolPage } from '../sol/sweep.js';
+import { isSolAddress } from '../sol/client.js';
 import { BRAND } from '../brand.js';
 
 // Internal endpoints used by the web app (same box): guarded by INTERNAL_API_KEY.
@@ -140,6 +142,12 @@ router.post('/internal/pages/sweep/:id', internalOnly, async (req, res) => {
   try {
     const page = await db.getPage(Number(req.params.id));
     if (!page) return res.status(404).json({ error: 'Page not found' });
+    // ?chain=solana sweeps the Solana vault, anything else the Robinhood Chain one.
+    if (req.query.chain === 'solana') {
+      if (!isSolAddress(page.sol_claimed_wallet)) return res.status(409).json({ error: 'Page is not claimed on Solana' });
+      sweepSolPage(page.id).catch((e) => console.error('Solana sweep (app) failed:', e.message));
+      return res.json({ ok: true, started: true, chain: 'solana' });
+    }
     if (!isAddress(page.claimed_wallet)) return res.status(409).json({ error: 'Page is not claimed' });
     sweepPage(page.id).catch((e) => console.error('Sweep (app) failed:', e.message));
     res.json({ ok: true, started: true });

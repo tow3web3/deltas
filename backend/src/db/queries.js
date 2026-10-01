@@ -244,19 +244,36 @@ export async function getPagesToSweep() {
        AND (p.sweep_error IS NULL OR p.sweep_tried_at IS NULL OR p.sweep_tried_at < NOW() - INTERVAL '30 minutes')
        AND (
          p.sweep_pending OR EXISTS (
-           SELECT 1 FROM page_payouts pp WHERE pp.page_id = p.id AND pp.direct = false AND pp.created_at > COALESCE(p.last_swept_at, 'epoch'::timestamp)
+           SELECT 1 FROM page_payouts pp WHERE pp.page_id = p.id AND pp.chain <> 'solana' AND pp.direct = false AND pp.created_at > COALESCE(p.last_swept_at, 'epoch'::timestamp)
          )
        ) ORDER BY p.id LIMIT 25`
   );
   return rows;
 }
+/** The same for Solana vaults, swept to the Solana wallet the owner bound. */
+export async function getSolPagesToSweep() {
+  const { rows } = await pool.query(
+    `SELECT p.* FROM social_pages p
+     WHERE p.sol_claimed_wallet IS NOT NULL AND p.sol_vault_address IS NOT NULL
+       AND (p.sol_sweep_error IS NULL OR p.sol_sweep_tried_at IS NULL OR p.sol_sweep_tried_at < NOW() - INTERVAL '30 minutes')
+       AND (
+         p.sol_sweep_pending OR EXISTS (
+           SELECT 1 FROM page_payouts pp WHERE pp.page_id = p.id AND pp.chain = 'solana' AND pp.direct = false AND pp.created_at > COALESCE(p.sol_last_swept_at, 'epoch'::timestamp)
+         )
+       ) ORDER BY p.id LIMIT 25`
+  );
+  return rows;
+}
+export async function markSolPageSwept(pageId, error = null) {
+  await pool.query('UPDATE social_pages SET sol_sweep_pending = $2, sol_sweep_error = $3, sol_sweep_tried_at = NOW(), sol_last_swept_at = CASE WHEN $2 THEN sol_last_swept_at ELSE NOW() END WHERE id = $1', [pageId, Boolean(error), error]);
+}
 export async function getPageVaultTokens(pageId) {
-  const { rows } = await pool.query('SELECT DISTINCT token FROM page_payouts WHERE page_id = $1 AND direct = false', [pageId]);
+  const { rows } = await pool.query("SELECT DISTINCT token FROM page_payouts WHERE page_id = $1 AND direct = false AND chain <> 'solana'", [pageId]);
   return rows.map((r) => r.token);
 }
-export async function insertPageSweep({ pageId, wallet, token, symbol, decimals, amount, txHash }) {
-  await pool.query('INSERT INTO page_sweeps (page_id, wallet, token, symbol, decimals, amount, tx_hash) VALUES ($1, $2, $3, $4, $5, $6, $7)',
-    [pageId, norm(wallet), norm(token), symbol || null, decimals ?? 18, amount.toString(), txHash || null]);
+export async function insertPageSweep({ pageId, wallet, token, symbol, decimals, amount, txHash, chain = 'robinhood' }) {
+  await pool.query('INSERT INTO page_sweeps (page_id, wallet, token, symbol, decimals, amount, tx_hash, chain) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)',
+    [pageId, norm(wallet), norm(token), symbol || null, decimals ?? 18, amount.toString(), txHash || null, chain]);
 }
 export async function markPageSwept(pageId, error = null) {
   // A failed sweep stays pending so the next tick retries it.

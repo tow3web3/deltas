@@ -4,12 +4,14 @@
 // the pages of that account come back with what waits for them, and one
 // signature from the wallet that should be paid sends it. A domain has no
 // sign-in, so it connects with a DNS record. Nothing here costs gas.
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { Arrow, Check, Copy, PlatformIcon } from '../Icons';
 import StockLogo from '../StockLogo';
 import { PageAvatar, ClaimBadge, fmtUsd, fmtAmount, shortAddr, ago } from './PageParts';
 import { useWallet } from '../../lib/useWallet';
+import { useSolWallet, NO_SOL_WALLET } from '../../lib/useSolWallet';
+import { CHAINS } from '../../lib/chains';
 import { PLATFORMS, PLATFORM_KEYS, normalizeHandle, pageName, pagePath, pageAvatar } from '../../lib/pages';
 import { claimMessage } from '../../lib/claimMessage';
 import { BRAND } from '../../lib/brand';
@@ -47,8 +49,35 @@ function CopyLine({ label, value }) {
  * vault with every asset, or that nothing waits and why. The answer comes before
  * the button, so nobody signs to find out.
  */
-function Result({ p, busy, wallet, onClaim }) {
-  const has = !p.claimed && p.vaultUsd > 0;
+// What waits for the owner across both vaults: the assets of every chain not claimed yet.
+const assetChain = (a) => a.chain || 'robinhood';
+const owedOf = (p) => (p.vaultAssets || []).filter((a) => !p.claimedOn?.[assetChain(a)]).reduce((t, a) => t + (a.usd || 0), 0);
+
+/** Which wallet gets paid: one on Solana, or one on Robinhood Chain. Each chain has its own vault. */
+function ChainSwitch({ chain, onChange }) {
+  const pill = (on) => `inline-flex items-center gap-2 rounded-full border px-3.5 py-1.5 text-[13px] font-medium transition-colors ${on ? 'border-cyan-500/60 bg-white/[0.08] text-ink shadow-glow' : 'border-white/10 bg-white/[0.03] text-mut hover:border-white/25 hover:text-ink'}`;
+  return (
+    <div className="mb-4 flex flex-wrap items-center gap-2">
+      <span className="label mr-1">Paid on</span>
+      {[['solana', '/sol.png', 'Phantom, Solflare, Backpack'], ['robinhood', '/eth.svg', 'MetaMask, Rabby']].map(([k, logo, hint]) => (
+        <button key={k} type="button" onClick={() => onChange(k)} className={pill(chain === k)} title={hint}>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={logo} alt="" className="h-4 w-4 rounded-full" />{CHAINS[k].label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function Result({ p, busy, wallet, chain, onClaim, onSwitch }) {
+  // This chain's vault and claim; the other chain is mentioned when something waits there.
+  const assets = (p.vaultAssets || []).filter((a) => assetChain(a) === chain);
+  const vaultUsd = assets.reduce((t, a) => t + (a.usd || 0), 0);
+  const claimedWallet = p.claimedOn?.[chain] || null;
+  const claimed = Boolean(claimedWallet);
+  const other = chain === 'solana' ? 'robinhood' : 'solana';
+  const otherUsd = p.claimedOn?.[other] ? 0 : (p.vaultAssets || []).filter((a) => assetChain(a) === other).reduce((t, a) => t + (a.usd || 0), 0);
+  const has = !claimed && vaultUsd > 0;
   const working = busy === `${p.platform}:${p.handle}`;
   return (
     <li className={`relative overflow-hidden rounded-2xl border ${has ? 'border-cyan-500/40 bg-white/[0.05] shadow-glow' : 'border-white/10 bg-white/[0.025]'}`}>
@@ -65,11 +94,11 @@ function Result({ p, busy, wallet, onClaim }) {
 
       <div className="relative grid gap-x-8 gap-y-4 px-5 py-5 sm:grid-cols-[auto_1fr] sm:items-end">
         <div>
-          <div className="label">{p.claimed ? 'In the vault since your claim' : 'Waiting for you'}</div>
-          <div className={`figure mt-2 pb-1 text-[52px] font-medium leading-none tracking-[-0.035em] ${has || (p.claimed && p.vaultUsd > 0) ? 'text-beam' : 'text-ink'}`}>{fmtUsd(p.vaultUsd)}</div>
+          <div className="label">{claimed ? 'In the vault since your claim' : `Waiting for you on ${CHAINS[chain].label}`}</div>
+          <div className={`figure mt-2 pb-1 text-[52px] font-medium leading-none tracking-[-0.035em] ${has || (claimed && vaultUsd > 0) ? 'text-beam' : 'text-ink'}`}>{fmtUsd(vaultUsd)}</div>
         </div>
         <div className="text-sm leading-relaxed text-mut">
-          {p.claimed ? <>This page is already claimed: its fees go straight to <span className="font-mono text-ink">{shortAddr(p.claimedWallet)}</span>. {fmtUsd(p.paidToOwnerUsd)} paid so far. Sign again to send them to another wallet.</>
+          {claimed ? <>This page is claimed on {CHAINS[chain].label}: its fees there go straight to <span className="font-mono text-ink">{shortAddr(claimedWallet)}</span>. {fmtUsd(p.paidToOwnerUsd)} paid so far. Sign again to send them to another wallet.</>
             : has ? <>Held in the vault of this page, from {p.payments} payment{p.payments === 1 ? '' : 's'}{p.lastAt ? `, the last one ${ago(p.lastAt)}` : ''}. Claiming sends all of it to your wallet, and every later payment reaches it directly.</>
               : p.exists && p.coins > 0 ? <>{p.coins} coin{p.coins === 1 ? ' routes' : 's route'} fees to this page, and the first payment has not run yet. Claim now: it will land in your wallet.</>
                 : p.exists ? <>No coin routes fees to this page at the moment, and its vault is empty.</>
@@ -77,11 +106,18 @@ function Result({ p, busy, wallet, onClaim }) {
         </div>
       </div>
 
-      {p.vaultAssets.length > 0 && (
+      {otherUsd > 0 && (
+        <div className="relative flex flex-wrap items-center justify-between gap-2 border-t border-white/10 px-5 py-3 text-xs text-mut">
+          <span>Also <span className="figure text-ink">{fmtUsd(otherUsd)}</span> waiting in the {CHAINS[other].label} vault of this page.</span>
+          <button type="button" onClick={() => onSwitch(other)} className="font-medium text-cyan-500 hover:underline">Claim it with a {CHAINS[other].label} wallet</button>
+        </div>
+      )}
+
+      {assets.length > 0 && (
         <ul className="relative grid gap-2 border-t border-white/10 px-5 py-4 sm:grid-cols-2">
-          {p.vaultAssets.map((a, i) => (
-            <li key={a.address} className={`flex items-center justify-between gap-3 rounded-2xl border border-white/10 bg-white/5 px-3.5 py-2.5 ${p.vaultAssets.length % 2 && i === p.vaultAssets.length - 1 ? 'sm:col-span-2' : ''}`}>
-              <span className="flex min-w-0 items-center gap-2"><StockLogo address={a.address} meta={{ symbol: a.symbol }} size="h-7 w-7" text="text-[8px]" /><span className="truncate font-mono text-xs font-medium text-ink">{a.symbol}</span></span>
+          {assets.map((a, i) => (
+            <li key={`${assetChain(a)}-${a.address}`} className={`flex items-center justify-between gap-3 rounded-2xl border border-white/10 bg-white/5 px-3.5 py-2.5 ${assets.length % 2 && i === assets.length - 1 ? 'sm:col-span-2' : ''}`}>
+              <span className="flex min-w-0 items-center gap-2"><StockLogo address={a.address} meta={{ symbol: a.symbol, image: a.image }} size="h-7 w-7" text="text-[8px]" /><span className="truncate font-mono text-xs font-medium text-ink">{a.symbol}</span></span>
               <span className="shrink-0 text-right"><span className="figure block text-sm text-ink">{fmtAmount(a.amount)}</span><span className="figure block text-[11px] text-mut">{fmtUsd(a.usd)}</span></span>
             </li>
           ))}
@@ -102,7 +138,7 @@ function Result({ p, busy, wallet, onClaim }) {
       <div className="relative flex flex-wrap items-center justify-between gap-3 border-t border-white/10 bg-white/[0.02] px-5 py-3.5">
         <span className="text-xs text-mut">{wallet.connected ? <>To <span className="font-mono text-ink">{shortAddr(wallet.address)}</span>. No gas, one signature.</> : 'Connect the wallet that should be paid. No gas, one signature.'}</span>
         <button type="button" onClick={onClaim} disabled={Boolean(busy)} className={has ? 'btn-primary' : 'btn-ghost'}>
-          {working ? 'Check your wallet…' : p.claimed ? 'Change the wallet' : has ? `Claim ${fmtUsd(p.vaultUsd)}` : wallet.connected ? 'Claim this page ahead' : 'Connect wallet'}
+          {working ? 'Check your wallet…' : claimed ? 'Change the wallet' : has ? `Claim ${fmtUsd(vaultUsd)}` : wallet.connected ? 'Claim this page ahead' : `Connect a ${CHAINS[chain].label} wallet`}
         </button>
       </div>
     </li>
@@ -175,7 +211,13 @@ function Face({ p }) {
 }
 
 export default function Claim({ initialPlatform = null, initialHandle = '', initialError = null, signed = false }) {
-  const wallet = useWallet();
+  // Solana first. The chain picks the wallet: Phantom and the like, or MetaMask and the like.
+  const evm = useWallet();
+  const sol = useSolWallet();
+  const [chain, setChain] = useState('solana');
+  const wallet = chain === 'solana' ? sol : evm;
+  const noWallet = chain === 'solana' ? NO_SOL_WALLET : 'No wallet found. Install MetaMask or Rabby.';
+  const chainPicked = useRef(false);
   const [platform, setPlatform] = useState(PLATFORMS[initialPlatform] ? initialPlatform : null);
   const [state, setState] = useState(null); // { platforms, proved }
   const [error, setError] = useState(initialError);
@@ -196,6 +238,13 @@ export default function Claim({ initialPlatform = null, initialHandle = '', init
     }
   }, []);
   useEffect(() => { load(); }, [load]);
+  // When everything waiting sits on Robinhood Chain, open on that chain's wallet. Once.
+  useEffect(() => {
+    if (chainPicked.current || !state?.proved?.length) return;
+    chainPicked.current = true;
+    const on = (c) => state.proved.reduce((t, p) => t + (p.claimedOn?.[c] ? 0 : (p.vaultAssets || []).filter((a) => assetChain(a) === c).reduce((u, a) => u + (a.usd || 0), 0)), 0);
+    if (on('robinhood') > 0 && on('solana') === 0) setChain('robinhood');
+  }, [state]);
 
   // Forget every page this browser proved. A claim already made is not undone.
   const disconnect = async () => {
@@ -210,7 +259,7 @@ export default function Claim({ initialPlatform = null, initialHandle = '', init
   const mismatch = wanted && proved.length > 0 && !proved.some((p) => p.handle === wanted);
   const cleanDomain = normalizeHandle('domain', domain);
   // What waits in the vaults of the connected pages: the first thing to say once connected.
-  const waiting = proved.filter((p) => !p.claimed).reduce((s, p) => s + (p.vaultUsd || 0), 0);
+  const waiting = proved.reduce((s, p) => s + owedOf(p), 0);
   const connectUrl = (k) => `/api/oauth/${k}/start?return=${encodeURIComponent(`/claim?platform=${k}${wanted && k === platform ? `&handle=${encodeURIComponent(wanted)}` : ''}`)}`;
   const accounts = (k) => (state?.proved || []).filter((p) => p.platform === k);
   const connected = (k) => accounts(k).length > 0;
@@ -230,14 +279,14 @@ export default function Claim({ initialPlatform = null, initialHandle = '', init
     setBusy(`${target.platform}:${target.handle}`);
     try {
       const addr = wallet.address || (await wallet.connect());
-      if (!addr) throw new Error(wallet.available ? 'Connect a wallet first' : 'No wallet found. Install MetaMask or Rabby.');
+      if (!addr) throw new Error(wallet.available ? 'Connect a wallet first' : noWallet);
       const n = await fetch('/api/app/auth/nonce', { cache: 'no-store' }).then((r) => r.json());
       if (!n?.nonce) throw new Error(n?.error || 'Could not get a nonce. Reload and try again.');
       const signature = await wallet.signMessage(claimMessage({ platform: target.platform, handle: target.handle, wallet: addr, nonce: n.nonce, issuedAt: n.issuedAt }), addr);
       const res = await fetch('/api/claim', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ platform: target.platform, handle: target.handle, wallet: addr, nonce: n.nonce, issuedAt: n.issuedAt, signature }) });
       const d = await res.json();
       if (!res.ok) throw new Error(d.error || 'Claim failed');
-      setDone({ ...target, wallet: d.wallet, path: d.page, sweepStarted: d.sweepStarted });
+      setDone({ ...target, wallet: d.wallet, chain: d.chain || chain, path: d.page, sweepStarted: d.sweepStarted });
       load();
     } catch (e) {
       setError(e.message);
@@ -251,7 +300,7 @@ export default function Claim({ initialPlatform = null, initialHandle = '', init
     setBusy('record');
     try {
       const addr = wallet.address || (await wallet.connect());
-      if (!addr) throw new Error(wallet.available ? 'Connect a wallet first' : 'No wallet found. Install MetaMask or Rabby.');
+      if (!addr) throw new Error(wallet.available ? 'Connect a wallet first' : noWallet);
       const res = await fetch('/api/claim/domain', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ domain, wallet: addr }) });
       const d = await res.json();
       if (!res.ok) throw new Error(d.error || 'Could not prepare the record');
@@ -272,7 +321,7 @@ export default function Claim({ initialPlatform = null, initialHandle = '', init
         <span className="beam relative mx-auto flex h-14 w-14 items-center justify-center rounded-full text-coal shadow-beam"><Check className="h-6 w-6" /></span>
         <h2 className="relative mt-5 font-display text-[28px] font-medium leading-tight tracking-[-0.03em] text-ink">{pageName(done.platform, done.handle)} is yours</h2>
         <p className="relative mx-auto mt-3 max-w-md text-sm leading-relaxed text-mut">
-          Every payment to this page now goes to <span className="font-mono text-ink">{shortAddr(done.wallet)}</span>.{' '}
+          Every payment to this page on {CHAINS[done.chain]?.label || 'this chain'} now goes to <span className="font-mono text-ink">{shortAddr(done.wallet)}</span>.{' '}
           {done.sweepStarted ? 'What waited in the vault is on its way: it arrives within a few minutes.' : 'What waited in the vault is sent within a few minutes.'}
         </p>
         <div className="relative mt-7 flex flex-wrap justify-center gap-2">
@@ -292,7 +341,7 @@ export default function Claim({ initialPlatform = null, initialHandle = '', init
           {PLATFORM_KEYS.map((k) => {
             const on = k === 'domain' || Boolean(state?.platforms?.[k]);
             const mine = accounts(k);
-            const owed = mine.filter((p) => !p.claimed).reduce((t, p) => t + (p.vaultUsd || 0), 0);
+            const owed = mine.reduce((t, p) => t + owedOf(p), 0);
             return (
               <button key={k} type="button" onClick={() => pick(k)} disabled={busy === `connect:${k}`}
                 className={`group relative flex min-w-0 flex-col items-start gap-2.5 overflow-hidden rounded-2xl border px-2.5 py-3 text-left transition disabled:opacity-60 sm:px-3.5 sm:py-3.5 ${platform === k ? 'border-cyan-500/60 bg-white/[0.07] shadow-glow' : mine.length ? 'border-hood-400/40 bg-white/[0.04] hover:border-cyan-500/60' : 'border-white/10 bg-white/[0.025] hover:border-white/25 hover:bg-white/[0.05]'}`}>
@@ -317,12 +366,13 @@ export default function Claim({ initialPlatform = null, initialHandle = '', init
       </Step>
 
       {platform && platform !== 'domain' && (
-        <Step n={2} title={proved.length > 0 ? (waiting > 0 ? <>You have <span className="text-beam">{fmtUsd(waiting)}</span> to claim</> : proved.every((p) => p.claimed) ? 'Your page is claimed' : 'Nothing to claim yet') : `Connect your ${PLATFORMS[platform].label} ${PLATFORMS[platform].noun}`} done={false}>
+        <Step n={2} title={proved.length > 0 ? (waiting > 0 ? <>You have <span className="text-beam">{fmtUsd(waiting)}</span> to claim</> : proved.every((p) => p.claimedOn?.[chain]) ? 'Your page is claimed' : 'Nothing to claim yet') : `Connect your ${PLATFORMS[platform].label} ${PLATFORMS[platform].noun}`} done={false}>
           {!state ? <div className="h-12 animate-pulse rounded-2xl bg-white/5" /> : proved.length > 0 ? (
             <>
               {mismatch && <p className="mb-3 rounded-2xl border border-gold-300 bg-gold-50 px-4 py-2.5 text-sm text-gold-700">You signed in, but not as the owner of {pageName(platform, wanted)}. Sign in with the account that runs it.</p>}
+              <ChainSwitch chain={chain} onChange={setChain} />
               <ul className="space-y-3">
-                {proved.map((p) => <Result key={p.handle} p={p} busy={busy} wallet={wallet} onClaim={() => sign(p)} />)}
+                {proved.map((p) => <Result key={p.handle} p={p} busy={busy} wallet={wallet} chain={chain} onSwitch={setChain} onClaim={() => sign(p)} />)}
               </ul>
               <div className="mt-4 flex flex-wrap items-center justify-between gap-2 px-1 text-xs text-mut">
                 <span>{wallet.connected ? <>Paid to <span className="font-mono text-ink">{shortAddr(wallet.address)}</span>. <button type="button" onClick={wallet.switchAccount} className="font-medium text-hood-600 hover:underline">Use another wallet</button></> : 'The wallet you connect is the one that gets paid.'}</span>
@@ -353,6 +403,7 @@ export default function Claim({ initialPlatform = null, initialHandle = '', init
       {platform === 'domain' && (
         <Step n={2} title="Connect your domain" done={Boolean(record?.found)}>
           <p className="max-w-lg text-sm leading-relaxed text-mut">A domain has no sign-in: it connects with a DNS record. Connect the wallet that should be paid, then add the record where you manage the domain.</p>
+          <div className="mt-4"><ChainSwitch chain={chain} onChange={(c) => { setChain(c); setRecord(null); }} /></div>
           <div className="mt-4 flex flex-wrap gap-2">
             <input value={domain} onChange={(e) => { setDomain(e.target.value); setRecord(null); }} placeholder="example.com" className={FIELD} />
             <button type="button" onClick={domainRecord} disabled={!cleanDomain || busy === 'record'} className={`${record?.found ? 'btn-ghost' : 'btn-primary'} disabled:cursor-not-allowed disabled:opacity-50`}>{busy === 'record' ? 'Checking…' : record ? 'Check again' : wallet.connected ? 'Get my record' : 'Connect wallet'}</button>

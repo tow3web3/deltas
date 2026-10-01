@@ -467,9 +467,6 @@ async function migrate() {
     await pool.query(`ALTER TABLE social_pages ADD COLUMN IF NOT EXISTS sol_vault_address VARCHAR(64);`);
     await pool.query(`ALTER TABLE social_pages ADD COLUMN IF NOT EXISTS sol_vault_encrypted TEXT;`);
     await pool.query(`ALTER TABLE social_pages ADD COLUMN IF NOT EXISTS sol_claimed_wallet VARCHAR(64);`);
-    await pool.query(`ALTER TABLE page_payouts ADD COLUMN IF NOT EXISTS chain TEXT NOT NULL DEFAULT 'robinhood';`);
-    await pool.query(`ALTER TABLE page_sweeps ADD COLUMN IF NOT EXISTS chain TEXT NOT NULL DEFAULT 'robinhood';`);
-    await pool.query(`ALTER TABLE page_claims ADD COLUMN IF NOT EXISTS chain TEXT NOT NULL DEFAULT 'robinhood';`);
     await pool.query(`ALTER TABLE execution_logs ADD COLUMN IF NOT EXISTS chain TEXT NOT NULL DEFAULT 'robinhood';`);
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_bot_configs_chain ON bot_configs(chain);`);
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_policy_legs_page ON policy_legs(page_id);`);
@@ -517,6 +514,18 @@ async function migrate() {
         created_at TIMESTAMP DEFAULT NOW()
       );
       CREATE INDEX IF NOT EXISTS idx_page_sweeps_page ON page_sweeps(page_id, created_at DESC);
+    `);
+    // Which chain each payment, sweep and claim happened on (after the tables exist, for a fresh install).
+    await pool.query(`ALTER TABLE page_payouts ADD COLUMN IF NOT EXISTS chain TEXT NOT NULL DEFAULT 'robinhood';`);
+    await pool.query(`ALTER TABLE page_sweeps ADD COLUMN IF NOT EXISTS chain TEXT NOT NULL DEFAULT 'robinhood';`);
+    await pool.query(`ALTER TABLE page_claims ADD COLUMN IF NOT EXISTS chain TEXT NOT NULL DEFAULT 'robinhood';`);
+    // A page's Solana vault is swept on its own schedule, to the Solana wallet its owner bound.
+    await pool.query(`
+      ALTER TABLE social_pages ADD COLUMN IF NOT EXISTS sol_claimed_at TIMESTAMP;
+      ALTER TABLE social_pages ADD COLUMN IF NOT EXISTS sol_sweep_pending BOOLEAN NOT NULL DEFAULT false;
+      ALTER TABLE social_pages ADD COLUMN IF NOT EXISTS sol_sweep_error TEXT;
+      ALTER TABLE social_pages ADD COLUMN IF NOT EXISTS sol_sweep_tried_at TIMESTAMP;
+      ALTER TABLE social_pages ADD COLUMN IF NOT EXISTS sol_last_swept_at TIMESTAMP;
     `);
     console.log('Migration complete');
     process.exit(0);

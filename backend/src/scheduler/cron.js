@@ -5,6 +5,7 @@ import { tickVoteCycles } from '../services/voteService.js';
 import { tickMissionClaims } from '../services/missionPayout.js';
 import { tickLottery } from '../services/lottery.js';
 import { tickPageSweeps } from '../services/pages.js';
+import { tickSolPageSweeps } from '../sol/sweep.js';
 import { cronFor } from '../services/schedule.js';
 
 const activeCronJobs = new Map();
@@ -34,6 +35,7 @@ export async function initScheduler() {
 
   cron.schedule('* * * * *', async () => {
     try { await tickPageSweeps(); } catch (e) { console.error('Page sweep tick failed:', e.message); }
+    try { await tickSolPageSweeps(); } catch (e) { console.error('Solana page sweep tick failed:', e.message); }
   });
 }
 

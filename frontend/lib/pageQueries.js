@@ -155,28 +155,34 @@ export async function pagesStats() {
  * same account can claim it again, so a handle that changes hands cannot be
  * used to redirect fees meant for its previous owner.
  */
-export async function claimPage({ pageId, wallet, proof, externalId = null, externalHandle = null, displayName = null, avatarUrl = null }) {
+export async function claimPage({ pageId, wallet, proof, chain = 'robinhood', externalId = null, externalHandle = null, displayName = null, avatarUrl = null }) {
+  // Each chain has its own vault and its own bound wallet: Solana's address keeps its case.
+  const sol = chain === 'solana';
+  const dest = sol ? String(wallet) : lc(wallet);
   const { getPool } = await import('./dbPool');
   const client = await getPool().connect();
   try {
     await client.query('BEGIN');
-    const { rows } = await client.query('SELECT id, external_id, claimed_wallet FROM social_pages WHERE id = $1 FOR UPDATE', [pageId]);
+    const { rows } = await client.query('SELECT id, external_id, claimed_wallet, sol_claimed_wallet FROM social_pages WHERE id = $1 FOR UPDATE', [pageId]);
     const page = rows[0];
     if (!page) throw new Error('Page not found');
     if (page.external_id && externalId && String(page.external_id) !== String(externalId)) {
       throw new Error('This page was claimed by a different account with the same handle. Contact us to resolve it.');
     }
     if (page.external_id && !externalId) throw new Error('This page must be claimed by signing in with the account that claimed it first');
+    const set = sol
+      ? 'sol_claimed_wallet = $2, sol_claimed_at = NOW(), sol_sweep_pending = true, sol_sweep_error = NULL, sol_sweep_tried_at = NULL, claimed_at = COALESCE(claimed_at, NOW())'
+      : 'claimed_wallet = $2, claimed_at = NOW(), sweep_pending = true, sweep_error = NULL, sweep_tried_at = NULL';
     await client.query(
-      `UPDATE social_pages SET claimed_wallet = $2, claimed_at = NOW(), sweep_pending = true, sweep_error = NULL, sweep_tried_at = NULL,
+      `UPDATE social_pages SET ${set},
          external_id = COALESCE(external_id, $3), display_name = COALESCE($4, display_name), avatar_url = COALESCE($5, avatar_url)
        WHERE id = $1`,
-      [pageId, lc(wallet), externalId ? String(externalId).slice(0, 64) : null, displayName ? String(displayName).slice(0, 120) : null, avatarUrl ? String(avatarUrl).slice(0, 500) : null]
+      [pageId, dest, externalId ? String(externalId).slice(0, 64) : null, displayName ? String(displayName).slice(0, 120) : null, avatarUrl ? String(avatarUrl).slice(0, 500) : null]
     );
-    await client.query('INSERT INTO page_claims (page_id, wallet, proof, external_id, external_handle) VALUES ($1, $2, $3, $4, $5)',
-      [pageId, lc(wallet), proof, externalId ? String(externalId).slice(0, 64) : null, externalHandle ? String(externalHandle).slice(0, 255) : null]);
+    await client.query('INSERT INTO page_claims (page_id, wallet, proof, external_id, external_handle, chain) VALUES ($1, $2, $3, $4, $5, $6)',
+      [pageId, dest, proof, externalId ? String(externalId).slice(0, 64) : null, externalHandle ? String(externalHandle).slice(0, 255) : null, sol ? 'solana' : 'robinhood']);
     await client.query('COMMIT');
-    return { previousWallet: page.claimed_wallet || null };
+    return { previousWallet: (sol ? page.sol_claimed_wallet : page.claimed_wallet) || null };
   } catch (e) {
     await client.query('ROLLBACK');
     throw e;
