@@ -62,7 +62,9 @@ export async function GET() {
           marketHoursOnly: Boolean(r.market_hours_only),
           distributions: r.distributions,
           yieldApy: yields[r.address]?.apy ?? null,
+          // In the coin's own chain currency: SOL on Solana, ETH on Robinhood Chain.
           eth30d: yields[r.address]?.eth30d ?? 0,
+          native: yields[r.address]?.native ?? null,
           lastExecution: r.last_execution,
           dashboardUrl: SITE ? `${SITE}/${r.address}` : `/${r.address}`,
           badgeUrl: SITE ? `${SITE}/api/badge/${r.address}` : `/api/badge/${r.address}`,

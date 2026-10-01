@@ -83,7 +83,7 @@ export async function getYieldInputs(address = null) {
   const sql = getSql();
   const rows = address
     ? await sql`
-        SELECT bc.source_token_address AS address,
+        SELECT bc.source_token_address AS address, MAX(COALESCE(bc.chain, 'robinhood')) AS chain,
                COALESCE(SUM(el.claimed_eth_wei) FILTER (WHERE el.execution_time > NOW() - INTERVAL '30 days'), 0)::text AS eth_30d,
                COALESCE(SUM(el.claimed_eth_wei) FILTER (WHERE el.execution_time > NOW() - INTERVAL '7 days'), 0)::text AS eth_7d,
                COUNT(*) FILTER (WHERE el.execution_time > NOW() - INTERVAL '30 days')::int AS cycles_30d,
@@ -92,7 +92,7 @@ export async function getYieldInputs(address = null) {
         WHERE bc.source_token_address = ${/^0x/.test(address) ? address.toLowerCase() : address} AND el.status = 'success' AND (el.holder_count > 0 OR el.burn_amount > 0 OR el.treasury_amount > 0)
         GROUP BY bc.source_token_address`
     : await sql`
-        SELECT bc.source_token_address AS address,
+        SELECT bc.source_token_address AS address, MAX(COALESCE(bc.chain, 'robinhood')) AS chain,
                COALESCE(SUM(el.claimed_eth_wei) FILTER (WHERE el.execution_time > NOW() - INTERVAL '30 days'), 0)::text AS eth_30d,
                COALESCE(SUM(el.claimed_eth_wei) FILTER (WHERE el.execution_time > NOW() - INTERVAL '7 days'), 0)::text AS eth_7d,
                COUNT(*) FILTER (WHERE el.execution_time > NOW() - INTERVAL '30 days')::int AS cycles_30d,

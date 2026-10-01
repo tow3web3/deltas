@@ -65,7 +65,7 @@ export async function GET(request, { params }) {
       treasury = sheet ? { ...sheet, ledger: ledger.map((l) => ({ token: l.token, amount: l.amount, ethSpent: l.eth_spent, buys: l.buys, lastAt: l.last_at })), asset: config.treasury_asset || null } : null;
     }
 
-    const yieldStats = onSol ? null : await tokenYield(src, meta[src]?.marketCap ?? null).catch(() => null);
+    const yieldStats = await tokenYield(src, meta[src]?.marketCap ?? null).catch(() => null);
 
     // Live quote for the reward when it is a stock.
     const stock = getStock(tgt);

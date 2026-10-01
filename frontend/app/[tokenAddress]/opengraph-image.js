@@ -68,7 +68,7 @@ export default async function Image({ params }) {
             </div>
             <div style={{ display: 'flex', gap: 14, marginTop: 26 }}>
               {[
-                [apy ? `${apy} APY` : (y.cycles30d ? `${y.eth30d.toFixed(3)} ETH` : 'starting'), apy ? 'dividend yield' : 'last 30 days'],
+                [apy ? `${apy} APY` : (y.cycles30d ? `${y.eth30d.toFixed(3)} ${y.native}` : 'starting'), apy ? 'dividend yield' : 'last 30 days'],
                 [`${stats.execution_count || 0}`, 'dividends paid'],
                 [`${(Number(stats.total_eth_claimed || 0) / 1e18).toFixed(3)} ETH`, 'fees returned'],
               ].map(([v, l]) => (

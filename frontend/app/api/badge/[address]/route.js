@@ -51,7 +51,7 @@ export async function GET(request, { params }) {
       return new Response(badge('dividends in', sym, '#2FA8FF'), { headers });
     }
     const apy = fmtApy(y.apy);
-    if (!apy) return new Response(badge('dividend yield', y.cycles30d > 0 ? `${y.eth30d.toFixed(3)} ETH / 30d` : 'starting', '#F6C343'), { headers });
+    if (!apy) return new Response(badge('dividend yield', y.cycles30d > 0 ? `${y.eth30d.toFixed(3)} ${y.native} / 30d` : 'starting', '#F6C343'), { headers });
     return new Response(badge('dividend yield', `${apy} APY`, '#2FA8FF'), { headers });
   } catch (e) {
     return new Response(badge('delta', 'unavailable', '#8A9099'), { status: 500, headers });
