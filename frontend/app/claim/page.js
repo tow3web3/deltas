@@ -13,7 +13,11 @@ export const metadata = pageMeta({
 });
 
 // The three moves of a claim, as one line of light.
-const MOVES = ['Prove the page', 'Choose the wallet', 'Receive the vault'];
+const MOVES = [
+  ['Prove the page', 'Sign in with the platform, add a DNS record, or type the code sent to the phone.'],
+  ['Choose the wallet', 'A Solana wallet, or a Robinhood Chain one. One signature, no gas.'],
+  ['Receive the vault', 'What waited arrives in minutes; every later payment comes straight to you.'],
+];
 
 export default async function ClaimPage({ searchParams }) {
   const sp = await searchParams;
@@ -22,25 +26,32 @@ export default async function ClaimPage({ searchParams }) {
     <main className="min-h-screen">
       <TickerTape />
       <Navigation />
-      <div className="relative mx-auto max-w-6xl px-5 py-12 sm:py-16">
-        <span aria-hidden="true" className="pointer-events-none absolute left-1/2 top-0 h-80 w-[36rem] max-w-full -translate-x-1/2 rounded-full bg-[radial-gradient(ellipse,rgba(47,168,255,0.2),transparent_65%)] blur-2xl" />
-        <div className="relative mx-auto max-w-2xl text-center">
-          <div className="eyebrow mb-5">Claim</div>
-          <h1 className="font-display text-[40px] font-medium leading-[1.02] tracking-[-0.035em] text-ink sm:text-[56px]">
-            Fees were routed to your page. <span className="text-beam">Take them.</span>
-          </h1>
-          <p className="mx-auto mt-5 max-w-lg text-[16px] leading-relaxed text-mut">Connect the page, choose the wallet that gets paid. What waited in the vault is sent to it, and every later payment reaches it directly. No gas, no fee.</p>
-          <ol className="mx-auto mt-7 flex max-w-xl flex-wrap items-center justify-center gap-x-3 gap-y-2">
-            {MOVES.map((m, i) => (
-              <li key={m} className="flex items-center gap-3">
-                {i > 0 && <span aria-hidden="true" className="beam h-px w-6 shrink-0 opacity-70 sm:w-8" />}
-                <span className="label flex items-center gap-1.5 whitespace-nowrap !tracking-[0.14em]"><span className="text-cyan-500">{i + 1}</span>{m}</span>
-              </li>
-            ))}
-          </ol>
-        </div>
-        <div className="relative mt-10">
-          <Claim initialPlatform={str(sp?.platform) || null} initialHandle={str(sp?.handle)} initialError={str(sp?.error) || null} signed={sp?.signed === '1'} />
+      {/* One screen on a desktop: the claim on the right, what it is and how it goes on the left. */}
+      {/* At least one full screen under the ticker and the bar (94px), so the footer starts below the fold. */}
+      <div className="relative mx-auto max-w-6xl px-5 py-8 lg:min-h-[calc(100svh-94px)] lg:py-10">
+        <span aria-hidden="true" className="pointer-events-none absolute left-0 top-0 h-80 w-[36rem] max-w-full rounded-full bg-[radial-gradient(ellipse,rgba(47,168,255,0.18),transparent_65%)] blur-2xl" />
+        <div className="relative grid gap-8 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)] lg:gap-12">
+          <div className="text-center lg:pt-2 lg:text-left">
+            <div className="eyebrow mb-4">Claim</div>
+            <h1 className="font-display text-[36px] font-medium leading-[1.04] tracking-[-0.035em] text-ink sm:text-[44px] lg:text-[48px]">
+              Fees were routed to your page. <span className="text-beam">Take them.</span>
+            </h1>
+            <p className="mx-auto mt-4 max-w-md text-[15px] leading-relaxed text-mut lg:mx-0">A coin sent part of its fees to your channel, account, site or number. They wait in a vault made for your page. No gas, no fee.</p>
+            <ol className="mx-auto mt-6 max-w-md space-y-3 text-left lg:mx-0">
+              {MOVES.map(([m, note], i) => (
+                <li key={m} className="flex gap-3">
+                  <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-cyan-500/40 bg-cyan-500/[0.08] font-mono text-[11px] text-cyan-500">{i + 1}</span>
+                  <span className="min-w-0">
+                    <span className="block text-[14px] font-medium text-ink">{m}</span>
+                    <span className="block text-[13px] leading-snug text-mut">{note}</span>
+                  </span>
+                </li>
+              ))}
+            </ol>
+          </div>
+          <div className="relative">
+            <Claim initialPlatform={str(sp?.platform) || null} initialHandle={str(sp?.handle)} initialError={str(sp?.error) || null} signed={sp?.signed === '1'} />
+          </div>
         </div>
       </div>
       <Footer />

@@ -333,32 +333,34 @@ export default function Claim({ initialPlatform = null, initialHandle = '', init
   }
 
   return (
-    <div className="mx-auto max-w-2xl space-y-4">
+    <div className="mx-auto max-w-2xl space-y-4 lg:mx-0 lg:max-w-none">
       {error && <div className="rounded-2xl border border-down/40 bg-down/10 px-4 py-3 text-sm text-down">{error}</div>}
 
       <Step n={1} title="Connect your page" done={Boolean(platform) && (platform === 'domain' ? Boolean(record?.found) : connected(platform))}>
-        <div className="grid grid-cols-3 gap-2">
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
           {PLATFORM_KEYS.map((k) => {
             const on = k === 'domain' || Boolean(state?.platforms?.[k]);
             const mine = accounts(k);
             const owed = mine.reduce((t, p) => t + owedOf(p), 0);
+            const status = busy === `connect:${k}` ? 'opening…' : k === 'domain' ? 'DNS record' : k === 'phone' ? (on ? 'code by WhatsApp' : 'soon') : on ? 'connect' : 'soon';
             return (
               <button key={k} type="button" onClick={() => pick(k)} disabled={busy === `connect:${k}`}
-                className={`group relative flex min-w-0 flex-col items-start gap-2.5 overflow-hidden rounded-2xl border px-2.5 py-3 text-left transition disabled:opacity-60 sm:px-3.5 sm:py-3.5 ${platform === k ? 'border-cyan-500/60 bg-white/[0.07] shadow-glow' : mine.length ? 'border-hood-400/40 bg-white/[0.04] hover:border-cyan-500/60' : 'border-white/10 bg-white/[0.025] hover:border-white/25 hover:bg-white/[0.05]'}`}>
+                className={`group relative flex min-w-0 items-center gap-2.5 overflow-hidden rounded-2xl border px-2.5 py-2.5 text-left transition disabled:opacity-60 sm:px-3 ${platform === k ? 'border-cyan-500/60 bg-white/[0.07] shadow-glow' : mine.length ? 'border-hood-400/40 bg-white/[0.04] hover:border-cyan-500/60' : 'border-white/10 bg-white/[0.025] hover:border-white/25 hover:bg-white/[0.05]'}`}>
                 {platform === k && <span aria-hidden="true" className="beam pointer-events-none absolute inset-x-0 top-0 h-px" />}
-                <span className="flex w-full items-center justify-between gap-2">
-                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-white/5"><PlatformIcon platform={k} className="h-5 w-5 shrink-0" /></span>
-                  {mine.length ? (owed > 0 ? <span className="figure beam rounded-full px-1.5 py-0.5 text-[10px] font-semibold leading-none text-coal">{fmtUsd(owed)}</span> : <Check className="h-3.5 w-3.5 text-cyan-500" />) : <span className={`h-1.5 w-1.5 rounded-full ${on ? 'bg-cyan-500 shadow-[0_0_8px_#5FE3FF]' : 'bg-white/15'}`} />}
+                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-white/5"><PlatformIcon platform={k} className="h-5 w-5 shrink-0" /></span>
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-[14px] font-medium leading-tight text-ink">{PLATFORMS[k].label}</span>
+                  {mine.length > 0 ? (
+                    <span className="mt-0.5 flex min-w-0 items-center gap-1.5">
+                      <Face p={mine[0]} />
+                      <span className="truncate font-mono text-[11px] font-medium text-cyan-500">{pageName(k, mine[0].handle)}</span>
+                      {mine.length > 1 && <span className="figure shrink-0 text-[10px] text-mut">+{mine.length - 1}</span>}
+                    </span>
+                  ) : (
+                    <span className="label mt-0.5 block truncate !text-[9px] !tracking-[0.14em]">{status}</span>
+                  )}
                 </span>
-                <span className="text-[14px] font-medium text-ink">{PLATFORMS[k].label}</span>
-                <span className="label !text-[9.5px] !leading-snug !tracking-[0.14em]">{busy === `connect:${k}` ? 'opening…' : mine.length ? 'connected as' : k === 'domain' ? 'DNS record' : k === 'phone' ? (on ? 'code by WhatsApp' : 'soon') : on ? 'connect' : 'soon'}</span>
-                {mine.length > 0 && (
-                  <span className="-mt-1 flex w-full min-w-0 items-center gap-1.5">
-                    <Face p={mine[0]} />
-                    <span className="truncate font-mono text-[11px] font-medium text-cyan-500">{pageName(k, mine[0].handle)}</span>
-                    {mine.length > 1 && <span className="figure shrink-0 text-[10px] text-mut">+{mine.length - 1}</span>}
-                  </span>
-                )}
+                {mine.length ? (owed > 0 ? <span className="figure beam shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-semibold leading-none text-coal">{fmtUsd(owed)}</span> : <Check className="h-3.5 w-3.5 shrink-0 text-cyan-500" />) : <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${on ? 'bg-cyan-500 shadow-[0_0_8px_#5FE3FF]' : 'bg-white/15'}`} />}
               </button>
             );
           })}
