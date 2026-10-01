@@ -17,8 +17,10 @@ export async function GET(request, { params }) {
   const src = meta[r.source_token_address] || {};
   const rew = meta[r.reward_token_used] || {};
   const stock = getStock(r.reward_token_used);
-  const rewardSymbol = rew.symbol || stock?.ticker || 'ETH';
-  const amount = fmtUnits(r.total_airdropped, rew.decimals ?? 18);
+  // The chain's own coin when nothing else is known: SOL (9 decimals) on Solana, ETH (18) on Robinhood Chain.
+  const sol = r.chain === 'solana';
+  const rewardSymbol = rew.symbol || stock?.ticker || (sol ? 'SOL' : 'ETH');
+  const amount = fmtUnits(r.total_airdropped, rew.decimals ?? (sol ? 9 : 18));
   const fonts = await loadFonts();
   const font = fonts.length ? 'Manrope' : undefined;
   const when = new Date(r.execution_time).toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'America/New_York' });
@@ -34,7 +36,7 @@ export async function GET(request, { params }) {
         <div style={{ position: 'absolute', bottom: -200, left: 200, width: 460, height: 460, borderRadius: 460, background: 'rgba(246,195,67,0.1)' }} />
 
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <Wordmark siteUrl={site} />
+          <Wordmark siteUrl={site} chain={r.chain || 'robinhood'} />
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 18, color: COLORS.mut }}>
             <div style={{ width: 12, height: 12, borderRadius: 12, background: COLORS.green }} />
             DIVIDEND PAID · {when} ET
@@ -73,7 +75,7 @@ export async function GET(request, { params }) {
         </div>
 
         <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 20, color: COLORS.mut }}>
-          <span>Your fees come back as stocks.</span>
+          <span>Route your fees anywhere.</span>
           <span>{site.replace(/^https?:\/\//, '')}/receipt/{r.id}</span>
         </div>
       </div>

@@ -3,7 +3,8 @@ import { getDashboard, scheduleLabel } from '../../lib/queries';
 import { fetchTokenMeta } from '../../lib/tokenMeta';
 import { tokenYield, fmtApy } from '../../lib/yield';
 import { CARD, COLORS, loadFonts, logoCandidates, inlineLogo, siteUrl, Monogram, Wordmark } from '../../lib/og';
-import { getStock, EVM_ADDR } from '../../lib/stocks';
+import { getStock } from '../../lib/stocks';
+import { isAnyAddress } from '../../lib/chains';
 
 export const runtime = 'nodejs';
 export const size = { width: CARD.width, height: CARD.height };
@@ -16,13 +17,13 @@ export default async function Image({ params }) {
   const site = siteUrl();
   const fonts = await loadFonts();
   const font = fonts.length ? 'Manrope' : undefined;
-  const data = EVM_ADDR.test(tokenAddress) ? await getDashboard(tokenAddress).catch(() => null) : null;
+  const data = isAnyAddress(tokenAddress) ? await getDashboard(tokenAddress).catch(() => null) : null;
 
   if (!data) {
     return new ImageResponse(
       <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', background: COLORS.ground, fontFamily: font, color: COLORS.ink }}>
         <Wordmark siteUrl={site} size={40} />
-        <div style={{ fontSize: 40, marginTop: 30, color: COLORS.mut }}>Your fees come back as stocks.</div>
+        <div style={{ fontSize: 40, marginTop: 30, color: COLORS.mut }}>Route your fees anywhere.</div>
       </div>, { ...size, fonts });
   }
 
@@ -32,7 +33,8 @@ export default async function Image({ params }) {
   const meta = await fetchTokenMeta([src, tgt]);
   const y = await tokenYield(src, meta[src]?.marketCap ?? null);
   const stock = getStock(tgt);
-  const rewardSymbol = meta[tgt]?.symbol || stock?.ticker || 'ETH';
+  const onSol = config.chain === 'solana';
+  const rewardSymbol = meta[tgt]?.symbol || stock?.ticker || (onSol ? 'SOL' : 'ETH');
   const apy = fmtApy(y.apy);
   const [srcLogo, rewLogo] = await Promise.all([
     inlineLogo(logoCandidates(src, meta[src], site), 144),
@@ -46,7 +48,7 @@ export default async function Image({ params }) {
         <div style={{ position: 'absolute', top: -180, right: -140, width: 560, height: 560, borderRadius: 560, background: 'rgba(47, 168, 255,0.16)' }} />
         <div style={{ position: 'absolute', bottom: -220, left: 240, width: 460, height: 460, borderRadius: 460, background: 'rgba(246,195,67,0.1)' }} />
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <Wordmark siteUrl={site} />
+          <Wordmark siteUrl={site} chain={data.config?.chain || 'robinhood'} />
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 18, color: COLORS.mut }}>
             <div style={{ width: 12, height: 12, borderRadius: 12, background: config.is_active ? COLORS.green : COLORS.mut }} />
             {config.is_active ? 'PAYING DIVIDENDS' : 'PAUSED'} · {scheduleLabel(config).toUpperCase()}
@@ -70,7 +72,7 @@ export default async function Image({ params }) {
               {[
                 [apy ? `${apy} APY` : (y.cycles30d ? `${y.eth30d.toFixed(3)} ${y.native}` : 'starting'), apy ? 'dividend yield' : 'last 30 days'],
                 [`${stats.execution_count || 0}`, 'dividends paid'],
-                [`${(Number(stats.total_eth_claimed || 0) / 1e18).toFixed(3)} ETH`, 'fees returned'],
+                [onSol ? `${(Number(stats.total_eth_claimed || 0) / 1e9).toFixed(3)} SOL` : `${(Number(stats.total_eth_claimed || 0) / 1e18).toFixed(3)} ETH`, 'fees returned'],
               ].map(([v, l]) => (
                 <div key={l} style={{ display: 'flex', flexDirection: 'column', background: COLORS.paper, border: `1px solid ${COLORS.line}`, borderRadius: 18, padding: '14px 22px' }}>
                   <span style={{ fontSize: 32, fontWeight: 800 }}>{v}</span>
@@ -87,7 +89,7 @@ export default async function Image({ params }) {
           </div>
         </div>
         <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 20, color: COLORS.mut }}>
-          <span>Your fees come back as stocks.</span>
+          <span>Route your fees anywhere.</span>
           <span>{site.replace(/^https?:\/\//, '')}/{src.slice(0, 10)}…</span>
         </div>
       </div>

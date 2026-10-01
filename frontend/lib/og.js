@@ -109,12 +109,13 @@ export function logoUrl(site) {
   return `${site}/brand/delta-256.png`;
 }
 
-export function Wordmark({ siteUrl: site, size = 28, color = COLORS.ink }) {
+export function Wordmark({ siteUrl: site, size = 28, color = COLORS.ink, chain = null }) {
+  const label = chain === 'solana' ? 'SOLANA' : chain === 'robinhood' ? 'ROBINHOOD CHAIN' : null;
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
       <img src={logoUrl(site)} width={size + 8} height={size + 8} alt="" />
-      <span style={{ display: 'flex', fontSize: size, fontWeight: 800, letterSpacing: -0.5, color }}>ROUTE<span style={{ color: COLORS.green }}>PAY</span></span>
-      <span style={{ fontSize: 13, fontWeight: 800, color: COLORS.greenDeep, border: `1px solid ${COLORS.green}55`, background: COLORS.tint, borderRadius: 999, padding: '3px 10px', letterSpacing: 1.5 }}>ROBINHOOD CHAIN</span>
+      <span style={{ display: 'flex', fontSize: size, fontWeight: 800, letterSpacing: -0.5, color }}>{BRAND}</span>
+      {label && <span style={{ fontSize: 13, fontWeight: 800, color: COLORS.greenDeep, border: `1px solid ${COLORS.green}55`, background: COLORS.tint, borderRadius: 999, padding: '3px 10px', letterSpacing: 1.5 }}>{label}</span>}
     </div>
   );
 }
