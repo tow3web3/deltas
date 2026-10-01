@@ -10,6 +10,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { ReactFlow, Background, Controls, Handle, Position, BaseEdge, EdgeLabelRenderer, getBezierPath, ReactFlowProvider, useNodesState } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
+import { useReducedMotion } from 'motion/react';
 import StockLogo from '../StockLogo';
 import Countdown from '../Countdown';
 import { Bolt, Pause, Play, Arrow, Copy, Check, PlatformIcon, Users, World, Wallet, Burn, Vault, Warning, Gas, Receipt, Telegram, InKind, Convert, External, Plus, Close } from '../Icons';
@@ -26,14 +27,20 @@ import { BRAND, BOT_USERNAME } from '../../lib/brand';
 // A kind of destination is told by its icon and its colour, on the node, on its edge and in the inspector.
 const KIND = {
   holders: { label: 'Holders', icon: Users, color: '#2FA8FF', text: 'text-hood-600', hint: 'The dividend. Weighted by balance and loyalty.' },
-  page: { label: 'Page', icon: World, color: '#5B9DFF', text: 'text-[#8DBBFF]', hint: 'A YouTube channel, a GitHub account, a domain, any page. Its owner claims by signing in.' },
-  wallet: { label: 'Wallet', icon: Wallet, color: '#F4F5F4', text: 'text-ink', hint: 'Any address: you, a partner, marketing, a DAO.' },
-  burn: { label: 'Buyback & burn', icon: Burn, color: '#FF7A1A', text: 'text-orange-700', hint: 'Buys your own token on Uniswap and burns it.' },
-  treasury: { label: 'Treasury', icon: Vault, color: '#F6C343', text: 'text-gold-700', hint: 'Retained earnings. Book value published on the dashboard.' },
+  page: { label: 'Page', icon: World, color: '#5FE3FF', text: 'text-cyan-500', hint: 'A YouTube channel, a GitHub account, a domain, any page. Its owner claims by signing in.' },
+  wallet: { label: 'Wallet', icon: Wallet, color: '#F3F5F9', text: 'text-ink', hint: 'Any address: you, a partner, marketing, a DAO.' },
+  burn: { label: 'Buyback & burn', icon: Burn, color: '#FF7A1A', text: 'text-orange-700', hint: 'Buys your own coin back and burns it.' },
+  treasury: { label: 'Treasury', icon: Vault, color: '#7B5CFF', text: 'text-violet-700', hint: 'Retained earnings. Book value published on the dashboard.' },
 };
 const sharePct = (bps) => (bps / 100).toFixed(bps % 100 ? 1 : 0);
-// The registration marks of a frame take the colour of what the node is.
-const marks = 'before:[border-color:var(--k)] after:[border-color:var(--k)]';
+// A kind colour (#RRGGBB) with an alpha: the lit edges and glows of the canvas.
+const alpha = (hex, a) => `${hex}${Math.round(a * 255).toString(16).padStart(2, '0')}`;
+// The beam running down: the lit edge of a bar or a callout.
+const BEAM_DOWN = 'linear-gradient(180deg, #2FA8FF 0%, #5FE3FF 50%, #7B5CFF 100%)';
+// Glass that floats over the canvas: darker than a panel, so it reads over the light.
+const floatGlass = '!bg-[rgba(9,12,19,0.84)] backdrop-blur-xl';
+// A channel of light: the bar of a share, the lit one glowing in its colour.
+const channel = (color, lit = true) => ({ background: `linear-gradient(90deg, ${alpha(color, 0.45)}, ${color})`, boxShadow: lit ? `0 0 10px ${alpha(color, 0.7)}` : 'none' });
 const ADDR = /^0x[0-9a-fA-F]{40}$/;
 const SOURCE_ID = 'source';
 const LEG_X = 480;
@@ -91,53 +98,56 @@ function AssetChip({ asset, meta, kind, fallback }) {
   return (
     <span className="inline-flex min-w-0 items-center gap-1.5 font-mono text-[10.5px] text-mut">
       <StockLogo address={asset} meta={{ symbol: d.symbol, image: custom?.image }} size="h-4 w-4" text="text-[5px]" />
-      <span className="truncate">{kind === 'holders' ? 'paid in' : kind === 'treasury' ? 'holds' : 'in'} <span className="font-semibold text-ink">{d.symbol}</span></span>
+      <span className="truncate">{kind === 'holders' ? 'paid in' : kind === 'treasury' ? 'holds' : 'in'} <span className="font-medium text-ink">{d.symbol}</span></span>
     </span>
   );
 }
 
 /** A state in two words, with a dot: the small print of a node. */
 function Note({ tone = 'mut', children, title }) {
-  const c = tone === 'green' ? ['bg-hood-500', 'text-hood-600'] : tone === 'gold' ? ['bg-gold-400', 'text-gold-600'] : tone === 'red' ? ['bg-down', 'text-down'] : ['bg-mut', 'text-mut'];
-  return <span title={title} className={`inline-flex shrink-0 items-center gap-1 font-mono text-[9.5px] uppercase tracking-[0.12em] ${c[1]}`}><span className={`h-1 w-1 rounded-full ${c[0]}`} />{children}</span>;
+  const c = tone === 'live' ? ['bg-cyan-500 shadow-[0_0_6px_#5FE3FF]', 'text-cyan-500'] : tone === 'gold' ? ['bg-gold-400', 'text-gold-600'] : tone === 'red' ? ['bg-down', 'text-down'] : ['bg-dim', 'text-mut'];
+  return <span title={title} className={`inline-flex shrink-0 items-center gap-1.5 font-mono text-[9.5px] uppercase tracking-[0.14em] ${c[1]}`}><span className={`h-1 w-1 rounded-full ${c[0]}`} />{children}</span>;
 }
 
+/** The dev wallet: where the light enters. Glass lit on the left, the beam leaving from its right. */
 function SourceNode({ data }) {
   const { src, config, assets, selected } = data;
   const payable = (assets?.assets || []).filter((a) => (a.isNative ? a.spendable > 0.0005 : a.usd >= 1)).slice(0, 4);
   return (
-    <div className={`frame w-[280px] overflow-visible shadow-soft transition-colors ${selected ? 'border-hood-500' : ''}`}>
+    <div className={`frame w-[280px] overflow-visible transition-shadow ${floatGlass} ${selected ? 'shadow-glow' : 'shadow-soft'}`}>
+      {/* the exit of the beam, a glow on the right edge where the channels start */}
+      <span aria-hidden="true" className="pointer-events-none absolute -right-px top-1/2 h-16 w-[2px] -translate-y-1/2 rounded-full bg-cyan-500 shadow-[0_0_14px_#5FE3FF]" />
       <div className="flex items-center gap-3 px-4 pt-3.5">
         <StockLogo address={config.source_token_address} meta={src} size="h-9 w-9" text="text-[10px]" />
         <div className="min-w-0 flex-1">
-          <div className="truncate font-display text-[15px] font-medium tracking-tight text-ink">{src.name || `$${src.symbol || 'TOKEN'}`}</div>
+          <div className="truncate font-display text-[15px] font-medium tracking-[-0.02em] text-ink">{src.name || `$${src.symbol || 'TOKEN'}`}</div>
           <div className="truncate font-mono text-[10.5px] text-mut">dev wallet {shortAddr(config.dev_wallet_public)}</div>
         </div>
-        <Note tone={config.is_active ? 'green' : 'mut'} title={config.is_active ? 'Cycles fire on schedule' : 'Nothing goes out until you resume'}>{config.is_active ? 'live' : 'paused'}</Note>
+        <Note tone={config.is_active ? 'live' : 'mut'} title={config.is_active ? 'Cycles fire on schedule' : 'Nothing goes out until you resume'}>{config.is_active ? 'live' : 'paused'}</Note>
       </div>
       <div className="mt-3.5 flex items-end justify-between gap-2 px-4 pb-3.5">
         <div className="shrink-0">
           <div className="label whitespace-nowrap !text-[9.5px]">In the wallet</div>
-          <div className="figure mt-1 text-[28px] font-medium leading-none tracking-tight text-hood-500">{assets ? fmtUsd(assets.totalUsd || 0) : '…'}</div>
+          <div className="figure mt-1.5 text-[28px] font-medium leading-none tracking-[-0.03em] text-ink">{assets ? fmtUsd(assets.totalUsd || 0) : '…'}</div>
         </div>
         <div className="min-w-0 text-right">
           <div className="label whitespace-nowrap !text-[9.5px]">Goes out</div>
-          <div className="mt-1 truncate font-mono text-[10.5px] text-ink">{config.scheduleLabel?.toLowerCase()}</div>
+          <div className="mt-1 truncate font-mono text-[10.5px] text-cyan-500">{config.scheduleLabel?.toLowerCase()}</div>
         </div>
       </div>
       {/* What the next cycle can pay, asset by asset */}
       {payable.length ? (
-        <div className="grid grid-cols-2 gap-px overflow-hidden rounded-b-[9px] border-t border-line bg-line">
+        <div className="grid grid-cols-2 gap-1.5 border-t border-white/[0.07] p-2.5">
           {payable.map((a, i) => (
-            <div key={a.address} className={`flex min-w-0 items-center gap-1.5 bg-paper px-3 py-1.5 ${payable.length % 2 && i === payable.length - 1 ? 'col-span-2' : ''}`}>
+            <div key={a.address} className={`flex min-w-0 items-center gap-1.5 rounded-xl bg-white/[0.04] px-2.5 py-1.5 ${payable.length % 2 && i === payable.length - 1 ? 'col-span-2' : ''}`}>
               <StockLogo address={a.address} meta={{ symbol: a.symbol }} size="h-4 w-4" text="text-[5px]" />
               <span className="truncate font-mono text-[10.5px] tabular-nums text-ink">{fmtNum(a.isNative ? a.spendable : a.amount)}</span>
               <span className="ml-auto font-mono text-[9.5px] text-mut">{a.symbol}</span>
             </div>
           ))}
         </div>
-      ) : <div className="border-t border-line px-4 py-2 font-mono text-[10.5px] text-mut">Nothing payable yet. Fees land here first.</div>}
-      <Handle type="source" position={Position.Right} className="!h-2.5 !w-2.5 !rounded-[3px] !border !border-ground !bg-hood-500" />
+      ) : <div className="border-t border-white/[0.07] px-4 py-2.5 font-mono text-[10.5px] text-mut">Nothing payable yet. Fees land here first.</div>}
+      <Handle type="source" position={Position.Right} className="!h-2.5 !w-2.5 !rounded-full !border-0 !bg-cyan-500 !shadow-[0_0_10px_#5FE3FF]" />
     </div>
   );
 }
@@ -151,47 +161,80 @@ function LegNode({ data }) {
   const dest = leg.kind === 'holders' ? `every ${sourceSymbol ? `$${sourceSymbol}` : ''} holder` : leg.kind === 'burn' ? `buys $${sourceSymbol || 'TOKEN'}, burns it`
     : leg.kind === 'page' ? (leg.page ? `${PLATFORMS[leg.page.platform]?.label || leg.page.platform} · ${pageName(leg.page.platform, leg.page.handle)}` : 'no page yet')
       : ADDR.test(leg.address) ? shortAddr(leg.address) : 'no address yet';
+  // A glass chip lit on its left edge in the colour of its kind (the warning colour while it is incomplete).
+  const lit = problem ? '#FF5C33' : k.color;
+  const shadow = selected
+    ? `0 0 0 1px ${alpha(k.color, 0.55)}, 0 0 46px -10px ${alpha(k.color, 0.6)}, 0 20px 50px rgba(0,0,0,0.5)`
+    : `-18px 0 38px -28px ${lit}, 0 20px 50px rgba(0,0,0,0.45)`;
   return (
-    <div className={`frame w-[250px] shadow-soft transition-colors ${marks} ${selected ? 'border-ink' : problem ? 'border-red-300' : ''}`} style={{ '--k': k.color }}>
-      <Handle type="target" position={Position.Left} className="!h-2.5 !w-2.5 !rounded-[3px] !border !border-ground" style={{ background: k.color }} />
-      {(leg.kind === 'holders' || leg.kind === 'burn') && <Handle type="source" position={Position.Right} className={`!h-1.5 !w-1.5 !rounded-[2px] !border-0 ${data.notify ? '!bg-hood-500' : '!bg-line'}`} />}
+    <div className={`panel w-[250px] transition-shadow ${floatGlass} ${problem && !selected ? 'border-down/40' : ''}`} style={{ borderLeftColor: alpha(lit, 0.75), boxShadow: shadow }}>
+      <span aria-hidden="true" className="pointer-events-none absolute inset-y-4 -left-px w-[2px] rounded-full" style={{ background: lit, boxShadow: `0 0 12px ${lit}` }} />
+      <Handle type="target" position={Position.Left} className="!h-2.5 !w-2.5 !rounded-full !border-0" style={{ background: k.color, boxShadow: `0 0 10px ${k.color}` }} />
+      {(leg.kind === 'holders' || leg.kind === 'burn') && <Handle type="source" position={Position.Right} className={`!h-1.5 !w-1.5 !rounded-full !border-0 ${data.notify ? '!bg-cyan-500 !shadow-[0_0_8px_#5FE3FF]' : '!bg-white/20'}`} />}
       <div className="flex items-start gap-2.5 px-3.5 pt-3">
         {page
           ? <PageAvatar page={page} size="h-8 w-8" badge="h-3.5 w-3.5" />
-          : <Icon className="h-7 w-7 shrink-0" style={{ color: k.color }} />}
+          : <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl" style={{ background: alpha(k.color, 0.1) }}><Icon className="h-[18px] w-[18px]" style={{ color: k.color }} /></span>}
         <div className="min-w-0 flex-1">
           <div className={`label truncate !text-[9.5px] ${k.text}`}>{page ? PLATFORMS[page.platform]?.label || page.platform : k.label}</div>
-          <div className="truncate font-display text-[15px] font-medium leading-tight tracking-tight text-ink">{leg.label}</div>
+          <div className="truncate font-display text-[15px] font-medium leading-tight tracking-[-0.02em] text-ink">{leg.label}</div>
         </div>
-        <div className="figure text-[26px] font-medium leading-none tracking-tight text-ink">{sharePct(leg.shareBps)}<span className="ml-px text-sm text-mut">%</span></div>
+        <div className="figure text-[26px] font-medium leading-none tracking-[-0.03em] text-ink">{sharePct(leg.shareBps)}<span className="ml-px text-sm text-mut">%</span></div>
       </div>
-      <div className={`mt-2 flex items-center gap-1 truncate px-3.5 font-mono text-[10.5px] ${problem ? 'text-red-600' : 'text-mut'}`}>
+      <div className={`mt-2 flex items-center gap-1 truncate px-3.5 font-mono text-[10.5px] ${problem ? 'text-down' : 'text-mut'}`}>
         {problem ? <><Warning className="h-3 w-3 shrink-0" />{problem}</> : <span className="truncate">{dest}</span>}
       </div>
-      {/* The share again, as a length: the legs of a routing compare at a glance. */}
-      <div className="mt-2.5 h-px bg-line"><div className="h-[2px] -translate-y-px transition-all" style={{ width: `${Math.min(100, leg.shareBps / 100)}%`, background: k.color }} /></div>
-      <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1 px-3.5 py-2">
+      {/* The share again, as a channel of light: the legs of a routing compare at a glance. */}
+      <div className="mx-3.5 mt-2.5 h-[3px] rounded-full bg-white/[0.06]"><div className="h-full rounded-full transition-all" style={{ width: `${Math.min(100, leg.shareBps / 100)}%`, ...channel(k.color) }} /></div>
+      <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1 px-3.5 py-2.5">
         {leg.kind === 'burn'
-          ? <span className="inline-flex min-w-0 items-center gap-1.5 font-mono text-[10.5px] text-mut"><StockLogo address={source?.address} meta={source?.meta} size="h-4 w-4" text="text-[5px]" /><span className="truncate">buys back <span className="font-semibold text-ink">${sourceSymbol || 'TOKEN'}</span></span></span>
+          ? <span className="inline-flex min-w-0 items-center gap-1.5 font-mono text-[10.5px] text-mut"><StockLogo address={source?.address} meta={source?.meta} size="h-4 w-4" text="text-[5px]" /><span className="truncate">buys back <span className="font-medium text-ink">${sourceSymbol || 'TOKEN'}</span></span></span>
           : <AssetChip asset={leg.asset} meta={meta} kind={leg.kind} fallback={leg.kind === 'treasury' ? 'in kind, ETH buys SPY' : 'in kind'} />}
         {page && (page.claimed
-          ? <Note tone="green" title="Claimed: its share is paid straight to its owner">paid direct</Note>
+          ? <Note tone="live" title="Claimed: its share is paid straight to its owner">paid direct</Note>
           : <Note tone="gold" title="Not claimed yet: the share waits in a vault for its owner">in its vault</Note>)}
-        {data.notify && <span title="Posts in Telegram when this leg pays" className="inline-flex shrink-0 items-center gap-1 font-mono text-[9.5px] uppercase tracking-[0.12em] text-mut"><Telegram className="h-3.5 w-3.5 text-[#2AABEE]" />posts</span>}
+        {data.notify && <span title="Posts in Telegram when this leg pays" className="inline-flex shrink-0 items-center gap-1 font-mono text-[9.5px] uppercase tracking-[0.14em] text-mut"><Telegram className="h-3.5 w-3.5 text-[#2AABEE]" />posts</span>}
       </div>
     </div>
   );
 }
 
+/**
+ * The channel from the dev wallet to a leg, drawn as light: a soft band whose
+ * thickness is the share, a lit core in the beam that ends in the colour of the
+ * leg, and a white pulse travelling along it while the policy runs.
+ */
 function ShareEdge({ id, sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition, data }) {
   const [path, lx, ly] = getBezierPath({ sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition });
-  const w = 2 + (data.shareBps / 10000) * 10;
+  const still = useReducedMotion();
+  const share = data.shareBps / 10000;
+  const w = 2 + share * 10;
+  const on = data.active !== false;
+  const g = `se-${id}`;
+  // The glow's box in canvas units, so a nearly flat channel keeps room for its light, and a leg
+  // dragged left of the wallet (where the curve bows out by xyflow's control offset) is not clipped.
+  const m = 40 + (sourceX > targetX ? 0.25 * 25 * Math.sqrt(sourceX - targetX) : 0);
+  const fx = Math.min(sourceX, targetX) - m;
+  const fy = Math.min(sourceY, targetY) - 40;
   return (
     <>
-      <BaseEdge id={id} path={path} style={{ stroke: data.color, strokeWidth: w, opacity: 0.35 }} />
-      <path d={path} fill="none" stroke={data.color} strokeWidth={Math.max(1.5, w / 2)} strokeDasharray="6 10" className={data.active === false ? '' : 'bm-flow'} style={{ animationDuration: `${Math.max(0.6, 2.4 - (data.shareBps / 10000) * 1.6)}s`, opacity: data.active === false ? 0.45 : 1 }} />
+      <defs>
+        <linearGradient id={`${g}-beam`} gradientUnits="userSpaceOnUse" x1={sourceX} y1={sourceY} x2={targetX} y2={targetY}>
+          <stop offset="0" stopColor="#2FA8FF" /><stop offset="0.45" stopColor="#5FE3FF" /><stop offset="1" stopColor={data.color} />
+        </linearGradient>
+        <filter id={`${g}-glow`} filterUnits="userSpaceOnUse" x={fx} y={fy} width={Math.abs(targetX - sourceX) + 2 * m} height={Math.abs(targetY - sourceY) + 80}>
+          <feGaussianBlur stdDeviation="5" result="b" /><feMerge><feMergeNode in="b" /><feMergeNode in="SourceGraphic" /></feMerge>
+        </filter>
+      </defs>
+      <BaseEdge id={id} path={path} style={{ stroke: `url(#${g}-beam)`, strokeWidth: w, strokeLinecap: 'round', opacity: on ? 0.26 : 0.12 }} />
+      <path d={path} fill="none" stroke={`url(#${g}-beam)`} strokeWidth={Math.max(1.5, w * 0.45)} strokeLinecap="round" filter={`url(#${g}-glow)`} opacity={on ? 0.95 : 0.4} />
+      {on && !still && (
+        <circle r={Math.max(2.5, w * 0.45)} fill="#fff" filter={`url(#${g}-glow)`}>
+          <animateMotion dur={`${Math.max(1.6, 3.2 - share * 1.6).toFixed(2)}s`} repeatCount="indefinite" path={path} keyPoints="0;1" keyTimes="0;1" calcMode="spline" keySplines="0.4 0 0.2 1" />
+        </circle>
+      )}
       <EdgeLabelRenderer>
-        <div className="pointer-events-none absolute rounded-[5px] border border-line bg-ground px-1.5 py-px font-mono text-[10.5px] tabular-nums text-ink" style={{ transform: `translate(-50%, -50%) translate(${lx}px, ${ly}px)` }}>{sharePct(data.shareBps)}%</div>
+        <div className="pointer-events-none absolute rounded-full border border-white/10 bg-[rgba(5,7,12,0.85)] px-2 py-0.5 font-mono text-[10.5px] tabular-nums text-cyan-500 backdrop-blur-md" style={{ transform: `translate(-50%, -50%) translate(${lx}px, ${ly}px)` }}>{sharePct(data.shareBps)}%</div>
       </EdgeLabelRenderer>
     </>
   );
@@ -205,38 +248,40 @@ function ActionNode({ data }) {
   const bound = Boolean(receipts || burns);
   const Row = ({ icon: RowIcon, label, to }) => (
     <div className="flex items-center gap-2 px-3.5 py-1.5">
-      <RowIcon className={`h-3.5 w-3.5 shrink-0 ${to ? 'text-hood-500' : 'text-mut'}`} />
+      <RowIcon className={`h-3.5 w-3.5 shrink-0 ${to ? 'text-cyan-500' : 'text-dim'}`} />
       <span className="text-[11px] text-ink">{label}</span>
-      <span className={`ml-auto min-w-0 truncate font-mono text-[10.5px] ${to ? 'text-hood-600' : 'text-mut'}`}>{to || 'not bound'}</span>
+      <span className={`ml-auto min-w-0 truncate font-mono text-[10.5px] ${to ? 'text-cyan-500' : 'text-mut'}`}>{to || 'not bound'}</span>
     </div>
   );
+  // Off chain, so drawn dashed; lit on its left edge once a group is bound.
   return (
-    <div className={`frame w-[250px] border-dashed shadow-soft transition-colors ${marks} ${selected ? 'border-ink' : bound ? 'border-hood-300' : ''}`} style={{ '--k': bound ? '#2FA8FF' : '#8A9099' }}>
-      <Handle type="target" position={Position.Left} className="!h-2.5 !w-2.5 !rounded-[3px] !border !border-ground !bg-mut" />
+    <div className={`panel w-[250px] border-dashed transition-shadow ${floatGlass}`}
+      style={{ ...(bound ? { borderLeftColor: 'rgba(95,227,255,0.55)', borderLeftStyle: 'solid' } : {}), boxShadow: selected ? '0 0 0 1px rgba(95,227,255,0.45), 0 0 46px -10px rgba(47,168,255,0.5), 0 20px 50px rgba(0,0,0,0.5)' : '0 20px 50px rgba(0,0,0,0.45)' }}>
+      <Handle type="target" position={Position.Left} className={`!h-2.5 !w-2.5 !rounded-full !border-0 ${bound ? '!bg-cyan-500 !shadow-[0_0_10px_#5FE3FF]' : '!bg-mut'}`} />
       <div className="flex items-start gap-2.5 px-3.5 pb-2.5 pt-3">
-        <Telegram className="h-7 w-7 shrink-0 text-[#2AABEE]" />
+        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-[#2AABEE]/10"><Telegram className="h-5 w-5 text-[#2AABEE]" /></span>
         <div className="min-w-0">
           <div className="label !text-[9.5px]">Action · off chain</div>
-          <div className="truncate font-display text-[15px] font-medium leading-tight tracking-tight text-ink">Telegram notifications</div>
+          <div className="truncate font-display text-[15px] font-medium leading-tight tracking-[-0.02em] text-ink">Telegram notifications</div>
         </div>
       </div>
-      <div className="divide-y divide-line/60 border-y border-line">
+      <div className="divide-y divide-white/[0.06] border-y border-white/[0.07]">
         <Row icon={Receipt} label="Dividend receipts" to={receipts} />
         <Row icon={Burn} label="Burn alerts" to={burns} />
       </div>
-      <div className="px-3.5 py-2 font-mono text-[10.5px] text-mut">{bound ? 'posts in Telegram every cycle' : `click to connect a group for $${sourceSymbol || 'TOKEN'}`}</div>
+      <div className="px-3.5 py-2.5 font-mono text-[10.5px] text-mut">{bound ? 'posts in Telegram every cycle' : `click to connect a group for $${sourceSymbol || 'TOKEN'}`}</div>
     </div>
   );
 }
 
-/** Thin grey link from a leg to an action, with a word on it. */
+/** Thin dashed link from a leg to an action, with a word on it: lit cyan once bound. */
 function NotifyEdge({ id, sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition, data }) {
   const [path, lx, ly] = getBezierPath({ sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition });
   return (
     <>
-      <BaseEdge id={id} path={path} style={{ stroke: data.active ? '#F4F5F4' : '#8A9099', strokeWidth: 1.5, strokeDasharray: '3 6', opacity: data.active ? 0.6 : 0.35 }} />
+      <BaseEdge id={id} path={path} style={{ stroke: data.active ? '#5FE3FF' : '#5A6275', strokeWidth: 1.5, strokeDasharray: '3 6', strokeLinecap: 'round', opacity: data.active ? 0.6 : 0.45 }} />
       <EdgeLabelRenderer>
-        <div className="pointer-events-none absolute rounded-[5px] border border-line bg-ground px-1.5 py-px font-mono text-[9px] uppercase tracking-[0.12em] text-mut" style={{ transform: `translate(-50%, -50%) translate(${lx}px, ${ly}px)` }}>{data.label}</div>
+        <div className={`pointer-events-none absolute rounded-full border border-white/10 bg-[rgba(5,7,12,0.85)] px-2 py-0.5 font-mono text-[9px] uppercase tracking-[0.14em] backdrop-blur-md ${data.active ? 'text-cyan-500' : 'text-mut'}`} style={{ transform: `translate(-50%, -50%) translate(${lx}px, ${ly}px)` }}>{data.label}</div>
       </EdgeLabelRenderer>
     </>
   );
@@ -250,13 +295,13 @@ const edgeTypes = { share: ShareEdge, notify: NotifyEdge };
 function RunBadge({ active }) {
   if (!active) {
     return (
-      <span className="inline-flex items-center gap-1.5 rounded-[5px] border border-gold-300 px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-[0.12em] text-gold-600" title="Nothing goes out until you resume">
+      <span className="inline-flex items-center gap-1.5 rounded-full border border-gold-300 bg-gold-50 px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.14em] text-gold-600" title="Nothing goes out until you resume">
         <Pause className="h-2.5 w-2.5" />Paused
       </span>
     );
   }
   return (
-    <span className="inline-flex items-center gap-1.5 rounded-[5px] border border-hood-300 px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-[0.12em] text-hood-600" title="Cycles fire on schedule">
+    <span className="inline-flex items-center gap-1.5 rounded-full border border-cyan-500/30 bg-cyan-500/[0.08] px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.14em] text-cyan-500 shadow-[0_0_18px_-6px_rgba(95,227,255,0.5)]" title="Cycles fire on schedule">
       <Play className="h-2.5 w-2.5" />
       Running
       <span className="run-bars flex h-2.5 items-end gap-[2px]" aria-hidden><i /><i /><i /></span>
@@ -264,25 +309,25 @@ function RunBadge({ active }) {
   );
 }
 
-const smallBtn = `inline-flex items-center gap-1 rounded-lg border border-line bg-ground px-2 py-1 font-mono text-[10.5px] text-mut transition-colors hover:border-hood-400 hover:text-ink ${focusCls}`;
+const smallBtn = `inline-flex items-center gap-1 rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-1 font-mono text-[10.5px] text-mut transition-colors hover:border-cyan-500/50 hover:text-ink ${focusCls}`;
 const textLink = 'inline-flex items-center gap-0.5 text-[11px] font-medium text-hood-600 hover:text-hood-700 hover:underline';
 
 function CopyBtn({ text, label = 'Copy' }) {
   const [ok, setOk] = useState(false);
   return (
     <button type="button" onClick={async () => { try { await navigator.clipboard.writeText(text); setOk(true); setTimeout(() => setOk(false), 1200); } catch { /* ignore */ } }} className={smallBtn}>
-      {ok ? <Check className="h-3 w-3 text-hood-600" /> : <Copy className="h-3 w-3" />}{ok ? 'Copied' : label}
+      {ok ? <Check className="h-3 w-3 text-cyan-500" /> : <Copy className="h-3 w-3" />}{ok ? 'Copied' : label}
     </button>
   );
 }
 
-/** A callout inside the inspector: a hairline box with a coloured edge and the icon of what it is about. */
+/** A callout inside the inspector: glass, its left edge lit (the beam for information, a warning colour otherwise), and the icon of what it is about. */
 function Callout({ tone = 'gold', icon: CalloutIcon, children, className = '' }) {
-  const c = tone === 'red' ? ['bg-down', 'text-down'] : tone === 'green' ? ['bg-hood-500', 'text-hood-500'] : ['bg-gold-400', 'text-gold-400'];
+  const c = tone === 'red' ? ['#FF5C33', 'rgba(255,92,51,0.6)', 'text-down'] : tone === 'live' ? [BEAM_DOWN, 'rgba(47,168,255,0.7)', 'text-cyan-500'] : ['#F6C343', 'rgba(246,195,67,0.55)', 'text-gold-400'];
   return (
-    <div className={`relative flex items-start gap-2 overflow-hidden rounded-xl border border-line bg-ground py-2 pl-3.5 pr-3 text-xs leading-snug text-mut ${className}`}>
-      <span className={`absolute inset-y-0 left-0 w-[2px] ${c[0]}`} />
-      {CalloutIcon && <CalloutIcon className={`mt-px h-3.5 w-3.5 shrink-0 ${c[1]}`} />}
+    <div className={`relative flex items-start gap-2 overflow-hidden rounded-xl border border-white/10 bg-white/[0.03] py-2 pl-3.5 pr-3 text-xs leading-snug text-mut ${className}`}>
+      <span aria-hidden="true" className="absolute inset-y-1.5 left-0 w-[2px] rounded-full" style={{ background: c[0], boxShadow: `0 0 8px ${c[1]}` }} />
+      {CalloutIcon && <CalloutIcon className={`mt-px h-3.5 w-3.5 shrink-0 ${c[2]}`} />}
       <span className="min-w-0">{children}</span>
     </div>
   );
@@ -290,7 +335,7 @@ function Callout({ tone = 'gold', icon: CalloutIcon, children, className = '' })
 
 function Section({ title, children, aside }) {
   return (
-    <section className="border-b border-line px-4 py-4 last:border-b-0">
+    <section className="border-b border-white/[0.07] px-4 py-4 last:border-b-0">
       <div className="mb-3 flex items-center justify-between gap-2"><h3 className="label">{title}</h3>{aside}</div>
       {children}
     </section>
@@ -300,7 +345,7 @@ function Section({ title, children, aside }) {
 /** The head of an inspector: what is selected, in the colour of its kind. */
 function InspectorHead({ caption, children }) {
   return (
-    <div className="border-b border-line px-4 py-4">
+    <div className="border-b border-white/[0.07] px-4 py-4">
       {caption && <div className="label">{caption}</div>}
       {children}
     </div>
@@ -330,36 +375,36 @@ function LegInspector({ leg, draft, setDraft, meta, sourceSymbol, onRemove }) {
       <InspectorHead>
         <div className="flex items-center justify-between gap-3">
           <span className={`label flex items-center gap-1.5 ${k.text}`}><KindIcon className="h-4 w-4" style={{ color: k.color }} />{k.label}</span>
-          <span className="figure text-2xl font-medium leading-none tracking-tight text-ink">{sharePct(leg.shareBps)}<span className="ml-px text-sm text-mut">%</span></span>
+          <span className="figure text-2xl font-medium leading-none tracking-[-0.03em] text-ink">{sharePct(leg.shareBps)}<span className="ml-px text-sm text-mut">%</span></span>
         </div>
-        <input value={leg.label} onChange={(e) => patch({ label: e.target.value.slice(0, 40) })} aria-label="Name of this destination" className="mt-2 w-full border-b border-transparent bg-transparent pb-0.5 font-display text-lg font-medium tracking-tight text-ink outline-none transition-colors hover:border-line focus:border-hood-500" />
+        <input value={leg.label} onChange={(e) => patch({ label: e.target.value.slice(0, 40) })} aria-label="Name of this destination" className="mt-2 w-full border-b border-transparent bg-transparent pb-0.5 font-display text-lg font-medium tracking-[-0.02em] text-ink outline-none transition-colors hover:border-white/15 focus:border-cyan-500/60" />
         <p className="mt-1 text-xs leading-snug text-mut">{k.hint}</p>
       </InspectorHead>
       <Section title="Share of every cycle" aside={total !== 10000 && <button type="button" onClick={balanceOthers} className={textLink}>Balance the others to 100%</button>}>
         <Slider label={k.label} value={leg.shareBps / 100} step={0.5} onChange={(v) => patch({ shareBps: Math.round(v * 100) })} format={(v) => `${v}%`} color={k.color} />
-        {/* Every leg on one bar, this one lit */}
-        <div className="mt-3 flex h-1.5 w-full gap-px overflow-hidden rounded-[2px] bg-line">
-          {draft.legs.map((l) => <div key={l.key} className="transition-all" style={{ width: `${l.shareBps / 100}%`, background: KIND[l.kind].color, opacity: l.key === leg.key ? 1 : 0.28 }} />)}
+        {/* Every leg on one bar of channels, this one lit */}
+        <div className="mt-3.5 flex h-1.5 w-full gap-0.5">
+          {draft.legs.map((l) => <div key={l.key} className="rounded-full transition-all" style={{ width: `${l.shareBps / 100}%`, ...channel(KIND[l.kind].color, l.key === leg.key), opacity: l.key === leg.key ? 1 : 0.25 }} />)}
         </div>
-        <div className={`mt-1.5 flex items-center justify-between font-mono text-[10.5px] ${total === 10000 ? 'text-mut' : 'text-red-600'}`}><span>all legs{total !== 10000 ? ', must be 100%' : ''}</span><span className="tabular-nums">{(total / 100).toFixed(1)}%</span></div>
+        <div className={`mt-1.5 flex items-center justify-between font-mono text-[10.5px] ${total === 10000 ? 'text-mut' : 'text-down'}`}><span>all legs{total !== 10000 ? ', must be 100%' : ''}</span><span className="tabular-nums">{(total / 100).toFixed(1)}%</span></div>
       </Section>
       {(leg.kind === 'wallet' || leg.kind === 'treasury') && (
         <Section title={leg.kind === 'wallet' ? 'Destination address' : 'Treasury wallet'}>
           <input value={leg.address} onChange={(e) => patch({ address: e.target.value.trim() })} placeholder="0x…" className={inputCls} />
-          {leg.address && !ADDR.test(leg.address) && <p className="mt-1 text-xs text-red-600">Not a valid address.</p>}
+          {leg.address && !ADDR.test(leg.address) && <p className="mt-1 text-xs text-down">Not a valid address.</p>}
           {leg.kind === 'treasury' && <p className="mt-1.5 text-xs text-mut">A wallet you control. {BRAND} only sends to it. Its holdings become the book value on the public dashboard.</p>}
         </Section>
       )}
       {leg.kind === 'page' && <PageSection leg={leg} patch={patch} taken={draft.legs.filter((l) => l.key !== leg.key && l.page).map((l) => `${l.page.platform}:${l.page.handle}`)} />}
       {leg.kind === 'burn' && (
         <Section title="What burns">
-          <p className="text-xs leading-snug text-mut">This share is swapped into <span className="font-mono font-semibold text-ink">${sourceSymbol || 'your token'}</span> on Uniswap and sent to the burn address. Stocks in this share are sold for ETH first. Supply shrinks every cycle.</p>
+          <p className="text-xs leading-snug text-mut">This share buys <span className="font-mono font-medium text-ink">${sourceSymbol || 'your token'}</span> back and sends it to the burn address. Stocks in this share are sold for ETH first. Supply shrinks every cycle.</p>
         </Section>
       )}
       {leg.kind === 'holders' && (
         <Section title="ETH fees convert to">
           <RewardEditor value={draft.reward} onChange={(v) => setDraft((d) => ({ ...d, reward: v }))} />
-          <p className="mt-2.5 border-l border-line pl-3 text-[11px] leading-snug text-mut">Not a stock? The second tab of the picker takes any contract address on Robinhood Chain, and holders get paid in that token.</p>
+          <Callout tone="live" className="mt-2.5 !text-[11px]">Not a stock? The second tab of the picker takes any token by contract address, and holders get paid in that token.</Callout>
         </Section>
       )}
       {leg.kind !== 'burn' && (
@@ -371,7 +416,7 @@ function LegInspector({ leg, draft, setDraft, meta, sourceSymbol, onRemove }) {
             <div className="mt-2.5 space-y-2">
               <StockPicker value={leg.asset === ZERO ? 'ETH' : leg.asset} onChange={(v) => patch({ asset: v === 'ETH' ? ZERO : v })} allowEth={leg.kind !== 'treasury'} />
               <AssetResearch address={leg.asset} />
-              <p className="text-[11px] leading-snug text-mut">A stock, ETH, or any token by contract address. Swapped on Uniswap with the fair-price guard; if no route fills, this leg pays in kind that cycle.</p>
+              <p className="text-[11px] leading-snug text-mut">A stock, ETH, or any token by contract address. Swapped with the fair-price guard; if no route fills, this leg pays in kind that cycle.</p>
             </div>
           )}
         </Section>
@@ -418,18 +463,18 @@ function PageSection({ leg, patch, taken }) {
   return (
     <Section title="The page" aside={p && <Link href={pagePath(p.platform, p.handle, p.slug)} target="_blank" className={textLink}>Public profile<External className="h-2.5 w-2.5" /></Link>}>
       {p && (
-        <div className="mb-2.5 flex items-center gap-3 rounded-xl border border-line bg-ground p-2.5">
-          <PageAvatar page={p} size="h-9 w-9" badge="h-4 w-4" />
+        <div className="mb-2.5 flex items-center gap-3 rounded-2xl border border-white/10 bg-white/[0.03] p-2.5">
+          <PageAvatar page={p} size="h-9 w-9" badge="h-4 w-4" lit={p.claimed} />
           <div className="min-w-0 flex-1">
             <div className="truncate text-[13px] font-medium text-ink">{pageName(p.platform, p.handle)}</div>
             <div className="truncate font-mono text-[10.5px] text-mut">{PLATFORMS[p.platform]?.label} {PLATFORMS[p.platform]?.noun}{p.vault ? ` · vault ${shortAddr(p.vault)}` : ' · vault created on save'}</div>
           </div>
-          <Note tone={p.claimed ? 'green' : 'gold'}>{p.claimed ? 'claimed' : 'unclaimed'}</Note>
+          <Note tone={p.claimed ? 'live' : 'gold'}>{p.claimed ? 'claimed' : 'unclaimed'}</Note>
         </div>
       )}
       <input value={text} onChange={(e) => setText(e.target.value)} placeholder={p ? 'Paste another link to change it' : 'youtube.com/@yourchannel, github.com/your-project, yoursite.com'} className={inputCls} />
-      {state.status === 'loading' && <p className="mt-1.5 font-mono text-[10.5px] text-mut">Looking it up…</p>}
-      {state.status === 'error' && <p className="mt-1.5 text-xs text-red-600">{state.error}</p>}
+      {state.status === 'loading' && <p className="mt-1.5 flex items-center gap-2 font-mono text-[10.5px] text-mut"><span className="h-3 w-3 shrink-0 animate-spin rounded-full border border-white/10 border-t-cyan-500" />Looking it up…</p>}
+      {state.status === 'error' && <p className="mt-1.5 text-xs text-down">{state.error}</p>}
       <div className="mt-2.5 flex items-center gap-2.5">
         <span className="label !text-[9.5px]">Reads</span>
         <span className="flex items-center gap-2">{PLATFORM_KEYS.map((pk) => <span key={pk} title={PLATFORMS[pk].label}><PlatformIcon platform={pk} className="h-3.5 w-3.5" /></span>)}</span>
@@ -446,7 +491,7 @@ const KIND_LABELS = new Set(['Page', 'Wallet', 'Partner wallet']);
 function AssetResearch({ address }) {
   const info = useTokenResearch(address || null);
   if (!address) return null;
-  if (!info || info.loading) return <div className="flex items-center gap-2 rounded-xl border border-line bg-ground px-3 py-3 font-mono text-[10.5px] text-mut"><span className="h-3 w-3 animate-spin rounded-full border border-line border-t-hood-500" /> Researching…</div>;
+  if (!info || info.loading) return <div className="flex items-center gap-2 rounded-2xl border border-white/10 bg-white/[0.03] px-3 py-3 font-mono text-[10.5px] text-mut"><span className="h-3 w-3 animate-spin rounded-full border border-white/10 border-t-cyan-500" /> Researching…</div>;
   if (info.error) return <Callout tone="red" icon={Warning}>{info.error}</Callout>;
   return <TokenCard token={info} compact />;
 }
@@ -465,16 +510,16 @@ function DevKeyReveal({ onRevealKey, address }) {
   };
   if (!onRevealKey) return null;
   return (
-    <div className="mt-3 rounded-xl border border-line bg-ground p-3">
+    <div className="mt-3 rounded-2xl border border-white/10 bg-white/[0.03] p-3">
       <div className="flex items-start justify-between gap-3">
         <div className="text-xs leading-snug"><span className="font-medium text-ink">Your wallet, your key.</span> <span className="text-mut">Export it anytime to import the dev wallet elsewhere.</span></div>
-        {!key && <Button variant="ghost" className="shrink-0 !px-2.5 !py-1 !text-[11px]" onClick={reveal} busy={busy}>Reveal key</Button>}
+        {!key && <Button variant="ghost" className="shrink-0 !px-3 !py-1 !text-[11px]" onClick={reveal} busy={busy}>Reveal key</Button>}
       </div>
       {key && (
-        <div className="mt-2.5 border-t border-line pt-2.5">
-          <div className="break-all rounded-lg border border-red-300 bg-red-50 p-2 font-mono text-[10.5px] leading-relaxed text-ink">{key}</div>
+        <div className="mt-2.5 border-t border-white/[0.07] pt-2.5">
+          <div className="break-all rounded-xl border border-down/40 bg-down/[0.08] p-2.5 font-mono text-[10.5px] leading-relaxed text-ink">{key}</div>
           <div className="mt-2 flex items-center gap-1.5"><CopyBtn text={key} label="Copy key" /><button type="button" onClick={() => setKey(null)} className={smallBtn}>Hide</button></div>
-          <p className="mt-2 flex items-start gap-1.5 text-[11px] leading-snug text-red-600"><Warning className="mt-px h-3.5 w-3.5 shrink-0" />Anyone holding this key controls the fees. Store it offline, never paste it in a chat.</p>
+          <p className="mt-2 flex items-start gap-1.5 text-[11px] leading-snug text-down"><Warning className="mt-px h-3.5 w-3.5 shrink-0" />Anyone holding this key controls the fees. Store it offline, never paste it in a chat.</p>
         </div>
       )}
     </div>
@@ -487,27 +532,27 @@ function ActionInspector({ data, act, busy, tg, demo }) {
   const receipts = telegram?.receiptsChatId ? telegram.receiptsTitle || `chat ${telegram.receiptsChatId}` : null;
   const burns = telegram?.burnAlerts?.length ? telegram.burnAlerts.map((b) => b.title || `chat ${b.chatId}`).join(', ') : null;
   const Status = ({ ok, icon: StatusIcon, label, to }) => (
-    <div className="flex items-center gap-2.5 bg-ground px-3 py-2">
-      <StatusIcon className={`h-4 w-4 shrink-0 ${ok ? 'text-hood-500' : 'text-mut'}`} />
+    <div className="flex items-center gap-2.5 px-3 py-2">
+      <StatusIcon className={`h-4 w-4 shrink-0 ${ok ? 'text-cyan-500' : 'text-dim'}`} />
       <span className="text-xs text-ink">{label}</span>
-      <span className={`ml-auto min-w-0 truncate font-mono text-[10.5px] ${ok ? 'text-hood-600' : 'text-mut'}`}>{ok ? to : 'not bound'}</span>
+      <span className={`ml-auto min-w-0 truncate font-mono text-[10.5px] ${ok ? 'text-cyan-500' : 'text-mut'}`}>{ok ? to : 'not bound'}</span>
     </div>
   );
   const Step = ({ n, children }) => (
-    <li className="grid grid-cols-[1.25rem_1fr] gap-x-2 text-xs leading-snug text-mut"><span className="font-mono text-[10.5px] leading-[1.5] text-hood-600">{String(n).padStart(2, '0')}</span><div className="min-w-0">{children}</div></li>
+    <li className="grid grid-cols-[1.25rem_1fr] gap-x-2 text-xs leading-snug text-mut"><span className="font-mono text-[10.5px] leading-[1.5] text-cyan-500">{String(n).padStart(2, '0')}</span><div className="min-w-0">{children}</div></li>
   );
   const Command = ({ shown, text }) => (
-    <div className="mt-1.5 flex items-center gap-1.5"><code className="min-w-0 truncate rounded-lg border border-line bg-ground px-2 py-1 font-mono text-[10.5px] text-ink">{shown}</code><CopyBtn text={text} label="Copy" /></div>
+    <div className="mt-1.5 flex items-center gap-1.5"><code className="min-w-0 truncate rounded-xl border border-white/10 bg-black/30 px-2.5 py-1 font-mono text-[10.5px] text-ink">{shown}</code><CopyBtn text={text} label="Copy" /></div>
   );
   return (
     <>
       <InspectorHead>
         <span className="label flex items-center gap-1.5"><Telegram className="h-4 w-4 text-[#2AABEE]" />Action · Telegram</span>
-        <div className="mt-2 font-display text-lg font-medium tracking-tight text-ink">Tell your community, every cycle</div>
+        <div className="mt-2 font-display text-lg font-medium tracking-[-0.02em] text-ink">Tell your community, every cycle</div>
         <p className="mt-1 text-xs leading-snug text-mut">The bot posts in your group when the holders leg pays (a receipt card with Share on X) and when the burn leg burns (the amount, the share of supply gone, the transaction).</p>
       </InspectorHead>
       <Section title="Bound groups">
-        <div className="divide-y divide-line overflow-hidden rounded-xl border border-line">
+        <div className="divide-y divide-white/[0.07] overflow-hidden rounded-2xl border border-white/10 bg-white/[0.02]">
           <Status ok={Boolean(receipts)} icon={Receipt} label="Dividend receipts" to={receipts} />
           <Status ok={Boolean(burns)} icon={Burn} label="Burn alerts" to={burns} />
         </div>
@@ -542,16 +587,16 @@ function SourceInspector({ data, draft, setDraft, act, busy, tg, onRevealKey }) 
     <>
       <InspectorHead caption="Dev wallet">
         <div className="mt-2 break-all font-mono text-xs leading-relaxed text-ink">{config.dev_wallet_public}</div>
-        <div className="mt-2 flex gap-1.5"><CopyBtn text={config.dev_wallet_public} label="Copy address" /><a href={explorerAddress(config.dev_wallet_public)} target="_blank" rel="noopener noreferrer" className={smallBtn}>Blockscout<External className="h-2.5 w-2.5" /></a></div>
+        <div className="mt-2 flex gap-1.5"><CopyBtn text={config.dev_wallet_public} label="Copy address" /><a href={explorerAddress(config.dev_wallet_public)} target="_blank" rel="noopener noreferrer" className={smallBtn}>Explorer<External className="h-2.5 w-2.5" /></a></div>
         <p className="mt-2.5 text-xs leading-snug text-mut">Set this address as the fee recipient on your launchpad. Whatever lands here is what the next cycle routes.</p>
         {lowGas && <Callout icon={Gas} className="mt-2.5">Low gas: <span className="font-mono text-ink">{fmtNum(eth.amount)} ETH</span>. Send about 0.005 ETH so cycles can pay transfers.</Callout>}
         <DevKeyReveal onRevealKey={onRevealKey} address={config.dev_wallet_public} />
       </InspectorHead>
       <Section title="Holdings" aside={assets && <span className="figure text-sm text-ink">{fmtUsd(assets.totalUsd)}</span>}>
         {assets?.error && <p className="text-xs text-down">{assets.error}</p>}
-        <div className="divide-y divide-line/70">
+        <div className="divide-y divide-white/[0.06]">
           {(assets?.assets || []).map((a) => (
-            <div key={a.address} className="grid grid-cols-[auto_1fr_auto_4.5rem] items-center gap-2 py-1.5">
+            <div key={a.address} className="grid grid-cols-[auto_1fr_auto_4.5rem] items-center gap-2 py-2">
               <StockLogo address={a.address} meta={{ symbol: a.symbol }} size="h-5 w-5" text="text-[6px]" />
               <span className="truncate font-mono text-xs text-ink">{a.symbol}</span>
               <span className="font-mono text-[11px] tabular-nums text-mut">{fmtNum(a.amount)}</span>
@@ -590,21 +635,21 @@ function DevWalletCard({ data, select }) {
   const lowGas = eth ? eth.amount < (assets?.gasReserveEth || 0.002) : Boolean(assets);
   const top = list.filter((a) => !a.isNative).sort((a, b) => (b.usd || 0) - (a.usd || 0)).slice(0, 4);
   return (
-    <div className="border-b border-line px-4 py-4">
+    <div className="border-b border-white/[0.07] px-4 py-4">
       <div className="flex items-center justify-between gap-2">
         <div className="label">Dev wallet</div>
-        <div className="flex items-center gap-1.5"><CopyBtn text={config.dev_wallet_public} label={shortAddr(config.dev_wallet_public)} /><a href={explorerAddress(config.dev_wallet_public)} target="_blank" rel="noopener noreferrer" title="Open in Blockscout" className={`${smallBtn} !px-1.5`}><External className="h-3 w-3" /></a></div>
+        <div className="flex items-center gap-1.5"><CopyBtn text={config.dev_wallet_public} label={shortAddr(config.dev_wallet_public)} /><a href={explorerAddress(config.dev_wallet_public)} target="_blank" rel="noopener noreferrer" title="Open in the explorer" className={`${smallBtn} !px-2`}><External className="h-3 w-3" /></a></div>
       </div>
       <div className="mt-3 flex items-end justify-between gap-3">
         <div>
-          <div className="figure text-4xl font-medium leading-none tracking-tight text-ink">{assets ? fmtUsd(assets.totalUsd || 0) : '…'}</div>
+          <div className="figure text-4xl font-medium leading-none tracking-[-0.03em] text-ink">{assets ? fmtUsd(assets.totalUsd || 0) : '…'}</div>
           <div className="mt-1.5 text-[11px] text-mut">waiting to be routed {config.scheduleLabel ? config.scheduleLabel.toLowerCase() : ''}</div>
         </div>
         {eth && <div title="Gas in the dev wallet" className={`flex items-center gap-1 font-mono text-[10.5px] tabular-nums ${lowGas ? 'text-gold-600' : 'text-mut'}`}><Gas className="h-3.5 w-3.5" />{fmtNum(eth.amount)} ETH</div>}
       </div>
       {assets?.error && <p className="mt-2 text-xs text-down">{assets.error}</p>}
       {top.length > 0 && (
-        <div className="mt-3.5 divide-y divide-line/70 border-y border-line/70">
+        <div className="mt-3.5 divide-y divide-white/[0.06] border-y border-white/[0.07]">
           {top.map((a) => (
             <div key={a.address} className="grid grid-cols-[auto_1fr_auto_4.5rem] items-center gap-2 py-1.5">
               <StockLogo address={a.address} meta={{ symbol: a.symbol }} size="h-4 w-4" text="text-[5px]" />
@@ -629,40 +674,42 @@ function RoutingSummary({ draft, meta, select, data }) {
       {data && <DevWalletCard data={data} select={select} />}
       <div className="px-4 pt-4">
         <div className="label">Routing</div>
-        <div className="mt-2 font-display text-lg font-medium tracking-tight text-ink">Where every cycle goes</div>
+        <div className="mt-2 font-display text-lg font-medium tracking-[-0.02em] text-ink">Where every cycle goes</div>
         <p className="mt-1 text-xs leading-snug text-mut">Click a node to edit it. Drag to arrange. Shares must total 100%.</p>
-        <div className="mt-4 flex h-2 w-full gap-px overflow-hidden rounded-[2px] bg-line">{draft.legs.map((l) => <div key={l.key} style={{ width: `${l.shareBps / 100}%`, background: KIND[l.kind].color }} className="transition-all" />)}</div>
+        {/* The split as one bar of channels, each lit in the colour of its leg */}
+        <div className="mt-4 flex h-2 w-full gap-0.5">{draft.legs.map((l) => <div key={l.key} style={{ width: `${l.shareBps / 100}%`, ...channel(KIND[l.kind].color) }} className="rounded-full transition-all" />)}</div>
       </div>
       {/* The routing as a ledger: one line per destination, in the order of the canvas */}
-      <div className="mt-3 divide-y divide-line/70 border-y border-line">
+      <div className="mt-4 divide-y divide-white/[0.06] border-y border-white/[0.07]">
         {draft.legs.map((l) => {
           const k = KIND[l.kind];
           const RowIcon = k.icon;
           const bad = legProblem(l);
           return (
-            <button key={l.key} type="button" onClick={() => select(l.key)} className="group flex w-full items-center gap-2.5 px-4 py-2 text-left transition-colors hover:bg-tile focus-visible:bg-tile focus-visible:outline-none">
+            <button key={l.key} type="button" onClick={() => select(l.key)} className="group relative flex w-full items-center gap-2.5 px-4 py-2.5 text-left transition-colors hover:bg-white/[0.04] focus-visible:bg-white/[0.04] focus-visible:outline-none">
+              <span aria-hidden="true" className="absolute inset-y-2 left-0 w-[2px] rounded-full opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100" style={{ background: k.color, boxShadow: `0 0 10px ${k.color}` }} />
               {l.kind === 'page' && l.page ? <PageAvatar page={l.page} size="h-5 w-5" badge="" /> : <RowIcon className="h-5 w-5 shrink-0" style={{ color: k.color }} />}
               <span className="min-w-0 flex-1">
                 <span className="block truncate text-[13px] text-ink">{l.label}</span>
-                <span className={`block truncate font-mono text-[10px] ${bad ? 'text-red-600' : 'text-mut'}`}>{bad || (l.kind === 'page' && l.page ? PLATFORMS[l.page.platform]?.label : (l.kind === 'wallet' || l.kind === 'treasury') && ADDR.test(l.address) ? shortAddr(l.address) : k.label.toLowerCase())}</span>
+                <span className={`block truncate font-mono text-[10px] ${bad ? 'text-down' : 'text-mut'}`}>{bad || (l.kind === 'page' && l.page ? PLATFORMS[l.page.platform]?.label : (l.kind === 'wallet' || l.kind === 'treasury') && ADDR.test(l.address) ? shortAddr(l.address) : k.label.toLowerCase())}</span>
               </span>
               {l.asset ? <StockLogo address={l.asset} meta={meta?.[l.asset]} size="h-4 w-4" text="text-[5px]" /> : null}
-              <span className="figure w-12 text-right text-sm text-ink">{sharePct(l.shareBps)}%</span>
+              <span className="figure w-12 text-right text-sm text-cyan-500">{sharePct(l.shareBps)}%</span>
               <Arrow className="h-3 w-3 shrink-0 text-mut opacity-0 transition-opacity group-hover:opacity-100" />
             </button>
           );
         })}
       </div>
-      <div className={`flex items-center justify-between px-4 py-2.5 ${total === 10000 ? 'text-mut' : 'text-red-600'}`}><span className="label !text-current">Total</span><span className="figure text-sm">{(total / 100).toFixed(1)}%</span></div>
+      <div className={`flex items-center justify-between px-4 py-2.5 ${total === 10000 ? 'text-mut' : 'text-down'}`}><span className="label !text-current">Total</span><span className="figure text-sm">{(total / 100).toFixed(1)}%</span></div>
     </>
   );
 }
 
 function Cycles({ logs, meta, onClose }) {
   return (
-    <div className="frame absolute bottom-4 left-4 z-20 flex max-h-[60%] w-[440px] max-w-[calc(100%-2rem)] flex-col shadow-soft">
-      <div className="flex shrink-0 items-center justify-between border-b border-line px-4 py-2.5"><span className="label">Recent cycles</span><button type="button" onClick={onClose} aria-label="Close" className="text-mut transition-colors hover:text-ink"><Close className="h-3.5 w-3.5" /></button></div>
-      <div className="min-h-0 divide-y divide-line/70 overflow-y-auto">
+    <div className={`frame absolute bottom-4 left-4 z-20 flex max-h-[60%] w-[440px] max-w-[calc(100%-2rem)] flex-col overflow-hidden shadow-soft ${floatGlass}`}>
+      <div className="flex shrink-0 items-center justify-between border-b border-white/[0.07] px-4 py-3"><span className="label">Recent cycles</span><button type="button" onClick={onClose} aria-label="Close" className="flex h-6 w-6 items-center justify-center rounded-full text-mut transition-colors hover:bg-white/[0.06] hover:text-ink"><Close className="h-3.5 w-3.5" /></button></div>
+      <div className="min-h-0 divide-y divide-white/[0.06] overflow-y-auto">
         {logs.length === 0 && <p className="px-4 py-3 text-xs text-mut">No cycle yet.</p>}
         {logs.map((l) => {
           const r = describeAddress(l.reward_token_used, meta[l.reward_token_used]);
@@ -675,7 +722,7 @@ function Cycles({ logs, meta, onClose }) {
                 <span className="flex items-center gap-3">
                   {paid && <Link href={`/receipt/${l.id}`} className={textLink}>receipt</Link>}
                   {l.tx_hash && <a href={explorerTx(l.tx_hash)} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-0.5 font-mono text-[10.5px] text-mut hover:text-ink">tx<External className="h-2.5 w-2.5" /></a>}
-                  <Note tone={state === 'paid' ? 'green' : state === 'failed' ? 'red' : 'mut'}>{state}</Note>
+                  <Note tone={state === 'paid' ? 'live' : state === 'failed' ? 'red' : 'mut'}>{state}</Note>
                 </span>
               </div>
               <div className="mt-1.5 space-y-1 text-mut">
@@ -683,7 +730,7 @@ function Cycles({ logs, meta, onClose }) {
                 {(l.legs || []).map((x, i) => {
                   const LegIcon = KIND[x.kind]?.icon || Wallet;
                   return (
-                    <div key={i} className={`flex items-center gap-1.5 ${x.failed ? 'text-red-600' : ''}`}>
+                    <div key={i} className={`flex items-center gap-1.5 ${x.failed ? 'text-down' : ''}`}>
                       <LegIcon className="h-4 w-4 shrink-0" style={x.failed ? undefined : { color: KIND[x.kind]?.color }} />
                       {x.failed ? <span className="min-w-0">{x.label}: {x.failed}</span> : <span className="font-mono tabular-nums text-ink">{fmtNum(units(x.output?.amount, x.output?.decimals ?? 18))} {x.output?.symbol || ''}</span>}
                       {!x.failed && x.page ? <span className="inline-flex min-w-0 items-center gap-1">to <PlatformIcon platform={x.page.platform} className="h-3 w-3 shrink-0" /><Link href={pagePath(x.page.platform, x.page.handle)} target="_blank" className="truncate font-medium text-hood-600 hover:underline">{pageName(x.page.platform, x.page.handle)}</Link></span> : null}
@@ -714,17 +761,17 @@ function Tour({ onDone }) {
   const step = TOUR[i];
   return (
     <div className="pointer-events-none absolute inset-0 z-40">
-      <div className="pointer-events-auto absolute inset-0 bg-black/60" onClick={onDone} />
-      <div className={`frame pointer-events-auto absolute w-[360px] shadow-soft reveal-pop ${step.pos}`}>
-        <div className="flex items-center justify-between gap-3 border-b border-line px-4 py-2.5">
-          <span className="label text-hood-600">Quick tour</span>
-          <span className="flex items-center gap-1" aria-label={`Step ${i + 1} of ${TOUR.length}`}>{TOUR.map((_, n) => <span key={n} className={`h-[3px] w-4 rounded-[1px] ${n <= i ? 'bg-hood-500' : 'bg-line'}`} />)}</span>
+      <div className="pointer-events-auto absolute inset-0 bg-[rgba(5,7,12,0.66)] backdrop-blur-[2px]" onClick={onDone} />
+      <div className={`frame pointer-events-auto absolute w-[360px] shadow-glow reveal-pop ${floatGlass} ${step.pos}`}>
+        <div className="flex items-center justify-between gap-3 border-b border-white/[0.07] px-4 py-3">
+          <span className="label text-cyan-500">Quick tour</span>
+          <span className="flex items-center gap-1" aria-label={`Step ${i + 1} of ${TOUR.length}`}>{TOUR.map((_, n) => <span key={n} className={`h-1 w-4 rounded-full transition-all ${n <= i ? 'beam shadow-[0_0_6px_rgba(47,168,255,0.6)]' : 'bg-white/10'}`} />)}</span>
         </div>
-        <div className="px-4 py-3.5">
-          <div className="font-display text-lg font-medium tracking-tight text-ink">{step.title}</div>
+        <div className="px-4 py-4">
+          <div className="font-display text-lg font-medium tracking-[-0.02em] text-ink">{step.title}</div>
           <p className="mt-1 text-[13px] leading-snug text-mut">{step.body}</p>
         </div>
-        <div className="flex items-center justify-between border-t border-line px-4 py-2.5">
+        <div className="flex items-center justify-between border-t border-white/[0.07] px-4 py-3">
           <button type="button" onClick={onDone} className="text-xs text-mut hover:text-ink">Skip</button>
           <Button className="!px-3.5 !py-1.5 text-xs" onClick={() => (i + 1 < TOUR.length ? setI(i + 1) : onDone())}>{i + 1 < TOUR.length ? 'Next' : 'Got it'}{i + 1 < TOUR.length && <Arrow className="h-3 w-3" />}</Button>
         </div>
@@ -895,12 +942,13 @@ function StudioInner({ data, refresh, onLogout, onSwitchWallet, demo = false, on
   return (
     <div className="relative flex h-full min-h-0 flex-col bg-ground">
       {/* Top bar */}
-      <div className="flex min-h-[3.5rem] shrink-0 flex-wrap items-stretch gap-y-2 border-b border-line bg-paper">
+      {/* z-30: the blur makes the bar a layer of its own, so its menus must sit above the canvas (and under the tour and the guide) */}
+      <div className="relative z-30 flex min-h-[3.5rem] shrink-0 flex-wrap items-stretch gap-y-2 border-b border-white/10 bg-[rgba(9,12,19,0.72)] backdrop-blur-xl">
         {/* Who: the coin */}
         <div className="flex min-w-0 items-center gap-3 px-4 py-2">
           <StockLogo address={config.source_token_address} meta={src} size="h-8 w-8" text="text-[9px]" />
           <div className="min-w-0">
-            <div className="flex items-baseline gap-1.5"><span className="truncate font-display text-[15px] font-medium leading-tight tracking-tight text-ink">{src.name || `$${src.symbol}`}</span><span className="font-mono text-[11px] text-mut">${src.symbol}</span></div>
+            <div className="flex items-baseline gap-1.5"><span className="truncate font-display text-[15px] font-medium leading-tight tracking-[-0.02em] text-ink">{src.name || `$${src.symbol}`}</span><span className="font-mono text-[11px] text-mut">${src.symbol}</span></div>
             <div className="mt-0.5 flex items-center gap-1.5">
               <CopyBtn text={config.source_token_address} label={shortAddr(config.source_token_address)} />
               <Link href={`/${config.source_token_address}`} target="_blank" className={smallBtn} title="The public page of your coin: share it with your community">Community page<External className="h-2.5 w-2.5" /></Link>
@@ -908,9 +956,9 @@ function StudioInner({ data, refresh, onLogout, onSwitchWallet, demo = false, on
           </div>
         </div>
         {/* State: running or not, when, how much waits */}
-        <div className="hidden items-center gap-4 border-l border-line px-4 lg:flex">
+        <div className="hidden items-center gap-4 border-l border-white/10 px-4 lg:flex">
           <RunBadge active={config.is_active} />
-          {config.is_active && <div><div className="label !text-[9.5px]">Next cycle</div><div className="figure text-[15px] leading-tight text-hood-500"><Countdown intervalMinutes={config.interval_minutes} scheduleKind={config.schedule_kind} /></div></div>}
+          {config.is_active && <div><div className="label !text-[9.5px]">Next cycle</div><div className="figure text-[15px] leading-tight text-cyan-500"><Countdown intervalMinutes={config.interval_minutes} scheduleKind={config.schedule_kind} /></div></div>}
           <div className="hidden xl:block"><div className="label !text-[9.5px]">Schedule</div><div className="text-xs leading-tight text-ink">{config.scheduleLabel}</div></div>
           {assets && <div className="hidden xl:block"><div className="label !text-[9.5px]">Dev wallet</div><div className="figure text-[15px] leading-tight text-ink">{fmtUsd(assets.totalUsd || 0)}</div></div>}
           {data.yield?.apy ? <div className="hidden 2xl:block"><div className="label !text-[9.5px]">Yield</div><div className="figure text-[15px] leading-tight text-ink">{data.yield.apy.toFixed(1)}%</div></div> : null}
@@ -921,15 +969,15 @@ function StudioInner({ data, refresh, onLogout, onSwitchWallet, demo = false, on
           <div className="relative">
             <Button variant="ghost" className="!px-3 !py-1.5 text-xs" aria-expanded={addOpen} onClick={() => setAddOpen((o) => !o)}><Plus className="h-3 w-3" />Add destination</Button>
             {addOpen && (
-              <div className="frame absolute right-0 top-full z-30 mt-1.5 w-80 shadow-soft">
-                <div className="label border-b border-line px-3.5 py-2">A new destination takes 10% from the largest leg</div>
-                <div className="divide-y divide-line/70">
+              <div className={`frame absolute right-0 top-full z-30 mt-2 w-80 overflow-hidden shadow-soft ${floatGlass}`}>
+                <div className="label border-b border-white/[0.07] px-3.5 py-2.5">A new destination takes 10% from the largest leg</div>
+                <div className="p-1.5">
                   {Object.entries(KIND).map(([k, v]) => {
                     const KindIcon = v.icon;
                     const taken = k === 'holders' && draft.legs.some((l) => l.kind === 'holders');
                     return (
-                      <button key={k} type="button" onClick={() => addLeg(k)} className={`group flex w-full items-center gap-3 px-3.5 py-2.5 text-left transition-colors hover:bg-tile focus-visible:bg-tile focus-visible:outline-none ${taken ? 'opacity-50' : ''}`}>
-                        <KindIcon className="h-6 w-6 shrink-0" style={{ color: v.color }} />
+                      <button key={k} type="button" onClick={() => addLeg(k)} className={`group flex w-full items-center gap-3 rounded-xl px-2.5 py-2 text-left transition-colors hover:bg-white/[0.05] focus-visible:bg-white/[0.05] focus-visible:outline-none ${taken ? 'opacity-50' : ''}`}>
+                        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl" style={{ background: alpha(v.color, 0.1) }}><KindIcon className="h-5 w-5" style={{ color: v.color }} /></span>
                         <span className="min-w-0 flex-1"><span className="block text-[13px] font-medium text-ink">{v.label}{taken && <span className="ml-1.5 font-mono text-[10px] text-mut">already on the canvas</span>}</span><span className="block text-[11px] leading-snug text-mut">{v.hint}</span></span>
                         {k === 'page' ? <span className="flex shrink-0 items-center gap-1"><PlatformIcon platform="youtube" className="h-3 w-3" /><PlatformIcon platform="github" className="h-3 w-3" /><PlatformIcon platform="x" className="h-3 w-3" /></span> : <Plus className="h-3 w-3 shrink-0 text-mut opacity-0 transition-opacity group-hover:opacity-100" />}
                       </button>
@@ -940,36 +988,38 @@ function StudioInner({ data, refresh, onLogout, onSwitchWallet, demo = false, on
             )}
           </div>
           <Button variant="ghost" className="!px-3 !py-1.5 text-xs" onClick={() => { setAddOpen(false); setShowCycles((s) => !s); }}><Receipt className="h-3.5 w-3.5" />Cycles</Button>
-          <span className="mx-0.5 hidden h-5 w-px bg-line sm:block" />
+          <span className="mx-0.5 hidden h-5 w-px bg-white/10 sm:block" />
           <Button variant="ghost" className="!px-3 !py-1.5 text-xs" onClick={() => act('run')} busy={busy === 'run'} disabled={!config.is_active}><Bolt className="h-3.5 w-3.5" />Run now</Button>
           {config.is_active ? <Button variant="ghost" className="!px-2.5 !py-1.5 text-xs" aria-label="Pause" title="Pause" onClick={() => act('pause')} busy={busy === 'pause'}><Pause className="h-3.5 w-3.5" /></Button> : <Button variant="ink" className="!px-3 !py-1.5 text-xs" onClick={() => act('resume')} busy={busy === 'resume'}><Play className="h-3 w-3" />Resume</Button>}
-          <span className="mx-0.5 hidden h-5 w-px bg-line sm:block" />
+          <span className="mx-0.5 hidden h-5 w-px bg-white/10 sm:block" />
           {dirty && <Button variant="ghost" className="!px-3 !py-1.5 text-xs" onClick={() => setDraft(initial)} disabled={busy === 'save'}>Discard</Button>}
           <Button className="!px-3.5 !py-1.5 text-xs" onClick={save} busy={busy === 'save'} disabled={demo ? false : !canSave}>{!demo && !setup && !dirty && <Check className="h-3 w-3" />}{demo ? 'Connect to save' : setup ? 'Pick your coin first' : dirty ? 'Save routing' : 'Saved'}</Button>
           <div className="relative">
             <Button variant="ghost" className="!px-3 !py-1.5 text-xs" aria-expanded={shareOpen} onClick={() => { setAddOpen(false); setShareOpen((o) => !o); }}>Share</Button>
             {shareOpen && (
-              <div className="frame absolute right-0 top-full z-30 mt-1.5 w-[22rem] max-w-[90vw] p-3 shadow-soft">
+              <div className={`frame absolute right-0 top-full z-30 mt-2 w-[22rem] max-w-[90vw] p-3.5 shadow-soft ${floatGlass}`}>
                 <div className="label mb-2">The public page of your coin</div>
                 <SharePanel address={config.source_token_address} symbol={src.symbol} compact />
               </div>
             )}
           </div>
-          {!demo && onSwitchWallet && <button type="button" onClick={onSwitchWallet} className="ml-1 text-xs text-mut hover:text-ink" title={`Signed in as ${data.user.wallet}`}>Switch wallet</button>}
-          {!demo && <button type="button" onClick={onLogout} className="ml-1 text-xs text-mut hover:text-ink">Sign out</button>}
+          {!demo && onSwitchWallet && <button type="button" onClick={onSwitchWallet} className="ml-1 text-xs text-mut transition-colors hover:text-ink" title={`Signed in as ${data.user.wallet}`}>Switch wallet</button>}
+          {!demo && <button type="button" onClick={onLogout} className="ml-1 text-xs text-mut transition-colors hover:text-ink">Sign out</button>}
         </div>
       </div>
 
       {setup && (
-        <div className="relative flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-line bg-ground py-2 pl-5 pr-4 text-[13px] text-mut">
-          <span className="absolute inset-y-0 left-0 w-[2px] bg-gold-400" />
-          <span><span className="label mr-2 text-gold-600">Blank canvas</span>Pick the wallet and the coin in the guide, launch, then draw the routing here.</span>
+        // The empty state of the canvas: glass, lit by the beam on its left edge and along its foot.
+        <div className="relative flex shrink-0 flex-wrap items-center justify-between gap-3 overflow-hidden border-b border-white/10 bg-white/[0.03] py-2.5 pl-5 pr-4 text-[13px] text-mut">
+          <span aria-hidden="true" className="absolute inset-y-0 left-0 w-[3px]" style={{ background: BEAM_DOWN, boxShadow: '0 0 14px rgba(47,168,255,0.7)' }} />
+          <span aria-hidden="true" className="beam pointer-events-none absolute inset-x-0 bottom-0 h-px opacity-50" />
+          <span><span className="label mr-2 text-cyan-500">Blank canvas</span>Pick the wallet and the coin in the guide, launch, then draw the routing here.</span>
           <Button variant="ghost" className="!px-3 !py-1 text-xs" onClick={() => setGuide(true)}>Open the guide</Button>
         </div>
       )}
       {setup && guide && (
-        <div className="absolute inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/70 p-4 pt-8 sm:pt-12">
-          <div className="frame relative w-full max-w-2xl !bg-ground p-5 shadow-soft reveal-pop sm:p-6">
+        <div className="absolute inset-0 z-50 flex items-start justify-center overflow-y-auto bg-[rgba(5,7,12,0.74)] p-4 pt-8 backdrop-blur-sm sm:pt-12">
+          <div className="frame frame-top relative w-full max-w-2xl rounded-3xl !bg-[rgba(9,12,19,0.95)] p-5 shadow-soft reveal-pop sm:p-6">
             <button type="button" onClick={() => (launched ? onCreated(launched) : setGuide(false))} className={`absolute right-4 top-4 ${smallBtn}`}>{launched ? 'Close' : 'Look around first'}<Close className="h-2.5 w-2.5" /></button>
             <Wizard embedded user={data.user} onCreated={onCreated} onLaunched={setLaunched} onSwitchWallet={onSwitchWallet} onLogout={onLogout} />
           </div>
@@ -978,39 +1028,44 @@ function StudioInner({ data, refresh, onLogout, onSwitchWallet, demo = false, on
       {tour && <Tour onDone={endTour} />}
       {demo && (
         // The first thing a visitor must understand: this canvas is a sample, and one button makes it theirs.
-        <div className="sample-bar relative flex shrink-0 flex-wrap items-center justify-between gap-x-6 gap-y-3 border-b border-hood-300 bg-hood-100 py-3.5 pl-6 pr-4">
-          <span className="absolute inset-y-0 left-0 w-1 bg-hood-500" />
-          <span className="flex min-w-0 flex-1 flex-wrap items-center gap-x-3 gap-y-1.5">
-            <span className="inline-flex shrink-0 items-center gap-1.5 rounded-md bg-hood-500 px-2 py-1 font-mono text-[10.5px] font-semibold uppercase tracking-[0.14em] text-coal">
+        <div className="sample-bar relative flex shrink-0 flex-wrap items-center justify-between gap-x-6 gap-y-3 overflow-hidden border-b border-white/10 bg-white/[0.035] py-3.5 pl-6 pr-4">
+          {/* The light of the bar: a glow leaking from the left, the beam on its left edge and along its foot */}
+          <span aria-hidden="true" className="pointer-events-none absolute -left-24 top-1/2 h-56 w-96 -translate-y-1/2 rounded-full bg-[radial-gradient(closest-side,rgba(47,168,255,0.26),transparent)]" />
+          <span aria-hidden="true" className="absolute inset-y-0 left-0 w-[3px]" style={{ background: BEAM_DOWN, boxShadow: '0 0 16px rgba(47,168,255,0.8)' }} />
+          <span aria-hidden="true" className="beam pointer-events-none absolute inset-x-0 bottom-0 h-px opacity-60" />
+          <span className="relative flex min-w-0 flex-1 flex-wrap items-center gap-x-3 gap-y-1.5">
+            <span className="beam inline-flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1 font-mono text-[10.5px] font-semibold uppercase tracking-[0.14em] text-coal shadow-beam">
               <span className="relative flex h-1.5 w-1.5"><span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-coal opacity-50" /><span className="relative h-1.5 w-1.5 rounded-full bg-coal" /></span>
               Sample policy
             </span>
-            <span className="text-[15px] font-semibold leading-snug text-ink">This canvas is a demo. Play with it, then route your own coin.</span>
+            <span className="text-[15px] font-medium leading-snug tracking-[-0.01em] text-ink">This canvas is a demo. Play with it, then route your own coin.</span>
             <span className="w-full text-[13px] leading-snug text-mut">Drag the nodes, open them, change shares and payout assets. Nothing is saved until you connect a wallet and pick your coin.</span>
           </span>
-          <Button className="sample-cta !px-5 !py-2.5 text-sm" onClick={onConnect}>Connect wallet and start<Arrow className="h-3.5 w-3.5" /></Button>
+          <Button className="sample-cta relative !px-5 !py-2.5 text-sm" onClick={onConnect}>Connect wallet and start<Arrow className="h-3.5 w-3.5" /></Button>
         </div>
       )}
       <div className="flex min-h-0 flex-1 flex-col md:flex-row">
-        {/* Canvas */}
+        {/* Canvas: the ground lit like the site (blue from the top left, violet from the bottom right), a faint grid of dots */}
         <div className="relative min-h-[45%] min-w-0 flex-1">
+          <div aria-hidden="true" className="pointer-events-none absolute inset-0 bg-[radial-gradient(640px_circle_at_0%_0%,rgba(47,168,255,0.13),transparent_62%),radial-gradient(680px_circle_at_100%_100%,rgba(123,92,255,0.11),transparent_62%)]" />
           <ReactFlow nodes={nodes} edges={edges} nodeTypes={nodeTypes} edgeTypes={edgeTypes} onNodesChange={onNodesChange} onNodeDragStop={onNodeDragStop}
             onNodeClick={(_, n) => setSelected(n.id)} onPaneClick={() => { setSelected(null); setAddOpen(false); }}
             fitView fitViewOptions={{ padding: 0.25, maxZoom: 1 }} minZoom={0.4} maxZoom={1.4} proOptions={{ hideAttribution: true }} nodesConnectable={false} elementsSelectable deleteKeyCode={null} panOnScroll>
-            <Background gap={24} size={1.2} color="#2A2E33" />
-            <Controls showInteractive={false} position="bottom-right" />
+            <Background gap={26} size={1.1} color="rgba(255,255,255,0.09)" />
+            <Controls showInteractive={false} position="bottom-right"
+              className="!overflow-hidden !rounded-2xl !border-white/10 !bg-[rgba(9,12,19,0.84)] backdrop-blur-xl [&_.react-flow__controls-button:hover]:!bg-white/[0.06] [&_.react-flow__controls-button:hover]:!text-ink [&_.react-flow__controls-button]:!border-b-white/[0.07] [&_.react-flow__controls-button]:!bg-transparent [&_.react-flow__controls-button]:!text-mut" />
           </ReactFlow>
-          {total !== 10000 && <div className="pointer-events-none absolute left-1/2 top-3 z-10 flex -translate-x-1/2 items-center gap-1.5 whitespace-nowrap rounded-lg border border-red-300 bg-ground px-3 py-1.5 text-xs text-red-600"><Warning className="h-3.5 w-3.5" />Shares total <span className="font-mono tabular-nums">{(total / 100).toFixed(1)}%</span>. Adjust a leg or use Balance.</div>}
-          {problems.length > 0 && total === 10000 && <div className="pointer-events-none absolute left-1/2 top-3 z-10 flex -translate-x-1/2 items-center gap-1.5 whitespace-nowrap rounded-lg border border-red-300 bg-ground px-3 py-1.5 text-xs text-red-600"><Warning className="h-3.5 w-3.5" />{problems.includes('needs a page') ? 'A page leg needs a link: paste it in the panel on the right.' : 'A wallet or treasury leg needs an address.'}</div>}
+          {total !== 10000 && <div className="pointer-events-none absolute left-1/2 top-3 z-10 flex -translate-x-1/2 items-center gap-1.5 whitespace-nowrap rounded-full border border-down/40 bg-[rgba(5,7,12,0.88)] px-3.5 py-1.5 text-xs text-down shadow-[0_0_24px_-8px_rgba(255,92,51,0.55)] backdrop-blur-md"><Warning className="h-3.5 w-3.5" />Shares total <span className="font-mono tabular-nums">{(total / 100).toFixed(1)}%</span>. Adjust a leg or use Balance.</div>}
+          {problems.length > 0 && total === 10000 && <div className="pointer-events-none absolute left-1/2 top-3 z-10 flex -translate-x-1/2 items-center gap-1.5 whitespace-nowrap rounded-full border border-down/40 bg-[rgba(5,7,12,0.88)] px-3.5 py-1.5 text-xs text-down shadow-[0_0_24px_-8px_rgba(255,92,51,0.55)] backdrop-blur-md"><Warning className="h-3.5 w-3.5" />{problems.includes('needs a page') ? 'A page leg needs a link: paste it in the panel on the right.' : 'A wallet or treasury leg needs an address.'}</div>}
           {showCycles && <Cycles logs={logs} meta={meta} onClose={() => setShowCycles(false)} />}
           {/* Legend: the key of the map, set on the canvas like the key of a drawing */}
-          <div className="pointer-events-none absolute bottom-4 right-16 z-10 hidden items-stretch divide-x divide-line overflow-hidden rounded-lg border border-line bg-paper/90 lg:flex">
-            {Object.entries(KIND).map(([k, v]) => { const KindIcon = v.icon; return <span key={k} className="flex items-center gap-1.5 px-2.5 py-1.5 font-mono text-[9.5px] uppercase tracking-[0.12em] text-mut"><KindIcon className="h-3.5 w-3.5" style={{ color: v.color }} />{v.label}</span>; })}
+          <div className="pointer-events-none absolute bottom-4 right-16 z-10 hidden items-stretch divide-x divide-white/[0.07] overflow-hidden rounded-full border border-white/10 bg-[rgba(5,7,12,0.78)] backdrop-blur-md lg:flex">
+            {Object.entries(KIND).map(([k, v]) => { const KindIcon = v.icon; return <span key={k} className="flex items-center gap-1.5 px-3 py-1.5 font-mono text-[9.5px] uppercase tracking-[0.14em] text-mut"><KindIcon className="h-3.5 w-3.5" style={{ color: v.color, filter: `drop-shadow(0 0 4px ${alpha(v.color, 0.6)})` }} />{v.label}</span>; })}
           </div>
         </div>
 
         {/* Inspector */}
-        <aside className="max-h-[50%] w-full shrink-0 overflow-y-auto border-t border-line bg-paper md:max-h-none md:w-[320px] md:border-l md:border-t-0 lg:w-[360px]">
+        <aside className="max-h-[50%] w-full shrink-0 overflow-y-auto border-t border-white/10 bg-white/[0.025] md:max-h-none md:w-[320px] md:border-l md:border-t-0 lg:w-[360px]">
           {selected === SOURCE_ID ? <SourceInspector data={data} draft={draft} setDraft={setDraft} act={act} busy={busy} tg={tg} onRevealKey={onRevealKey} />
             : selected === TG_ID ? <ActionInspector data={data} act={act} busy={busy} tg={tg} demo={demo} />
             : selectedLeg ? <LegInspector key={selectedLeg.key} leg={selectedLeg} draft={draft} setDraft={setDraft} meta={meta} sourceSymbol={src.symbol} onRemove={() => removeLeg(selectedLeg.key)} />

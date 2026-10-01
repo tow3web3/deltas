@@ -35,14 +35,15 @@ export function Flow({ channels, width = 640, height = 420, split = 0.67, beamLa
   const ys = channels.map((_, i) => (n === 1 ? H / 2 : 40 + (i * (H - 80)) / (n - 1)));
   const path = (y) => `M ${x0} ${H / 2} C ${x0 + (x1 - x0) * 0.45} ${H / 2}, ${x1 - (x1 - x0) * 0.4} ${y}, ${x1} ${y}`;
   const maxShare = Math.max(...channels.map((c) => c.share || 1), 1);
-  const uid = `fl${Math.round(W)}${n}`;
+  const uid = `fl${Math.round(W)}x${Math.round(H)}n${n}s${Math.round(split * 100)}`;
   return (
     <div className={`relative ${className}`}>
       <svg viewBox={`0 0 ${W} ${H}`} className="h-auto w-full" style={{ overflow: 'visible' }}>
         <defs>
-          <linearGradient id={`${uid}-beam`} x1="0" x2="1"><stop offset="0" stopColor="#2FA8FF" /><stop offset="0.5" stopColor="#5FE3FF" /><stop offset="1" stopColor="#7B5CFF" /></linearGradient>
-          <filter id={`${uid}-glow`} x="-20%" y="-50%" width="140%" height="200%"><feGaussianBlur stdDeviation="6" result="b" /><feMerge><feMergeNode in="b" /><feMergeNode in="SourceGraphic" /></feMerge></filter>
+          <linearGradient id={`${uid}-beam`} gradientUnits="userSpaceOnUse" x1={-40} y1={0} x2={x1} y2={0}><stop offset="0" stopColor="#2FA8FF" /><stop offset="0.5" stopColor="#5FE3FF" /><stop offset="1" stopColor="#7B5CFF" /></linearGradient>
+          <filter id={`${uid}-glow`} filterUnits="userSpaceOnUse" x={-80} y={-40} width={W + 160} height={H + 80}><feGaussianBlur stdDeviation="6" result="b" /><feMerge><feMergeNode in="b" /><feMergeNode in="SourceGraphic" /></feMerge></filter>
         </defs>
+        {/* user-space gradient and glow: a perfectly flat stroke has no height, and box units would hide it */}
         <line x1={-40} y1={H / 2} x2={x0} y2={H / 2} stroke={`url(#${uid}-beam)`} strokeWidth={14} strokeLinecap="round" filter={`url(#${uid}-glow)`} opacity={0.9} />
         {beamLabel && <text x={x0 - 30} y={H / 2 - 16} fill="#5A6275" fontSize="10" fontFamily="var(--font-mono), monospace" letterSpacing="2">{beamLabel}</text>}
         {channels.map((c, i) => {

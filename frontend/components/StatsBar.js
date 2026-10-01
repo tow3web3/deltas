@@ -69,10 +69,10 @@ function Overlap({ children }) {
 function Line({ label, children, figure, href, cta }) {
   const Tag = href ? Link : 'div';
   return (
-    <Tag {...(href ? { href } : {})} className={`group grid flex-1 grid-cols-[1fr_auto] content-center items-center gap-x-4 gap-y-2.5 px-6 py-5 ${href ? 'transition-colors hover:bg-tile/50' : ''}`}>
+    <Tag {...(href ? { href } : {})} className={`group grid flex-1 grid-cols-[minmax(0,1fr)_auto] content-center items-center gap-x-4 gap-y-2.5 px-6 py-5 ${href ? 'transition-colors hover:bg-tile/50' : ''}`}>
       <div className="label flex items-center gap-2">{label}{cta && <span className="inline-flex items-center gap-1 text-hood-600 opacity-0 transition-opacity group-hover:opacity-100">{cta}<Arrow className="h-3 w-3" /></span>}</div>
       <div className="row-span-2 text-right font-display text-3xl font-medium leading-none tracking-tight text-ink">{figure}</div>
-      <div className="min-h-[24px]">{children}</div>
+      <div className="min-h-[24px] min-w-0">{children}</div>
     </Tag>
   );
 }

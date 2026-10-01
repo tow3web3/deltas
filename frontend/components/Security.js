@@ -1,69 +1,154 @@
-// The guarantees, as a specification sheet. Each line says what is guaranteed,
-// how it is enforced and the value that can be checked. Beside it, the scope of
-// the dev wallet key: the three calls a cycle makes, and nothing else.
-import { Arrow, Check, Blocked } from './Icons';
+'use client';
+
+// What protects the money, told as the path it takes: the key, the swap, the
+// vault, the claim, the public record. Each station is lit on one beam and says
+// what guards it and the value anyone can check. Below, the two guards that are
+// easiest to get wrong, drawn out: the fair-price floor as a channel bar, and
+// how a page proves who owns it.
+import { motion, useReducedMotion } from 'motion/react';
 import StockLogo from './StockLogo';
+import { Arrow, Eye, Key, PlatformIcon, Shield, Vault, Verified } from './Icons';
+import { Glass, EASE } from './ui/Light';
 import { BRAND } from '../lib/brand';
-import { getStock } from '../lib/stocks';
+import { getXStock } from '../lib/xstocks';
 
-const SPEC = [
-  {
-    what: 'Key at rest',
-    how: 'Your wallet key is encrypted the moment you send it and stored encrypted. It is only ever decrypted in memory, at execution time.',
-    values: ['AES-256-GCM'],
-  },
-  {
-    what: 'Least privilege',
-    how: 'A cycle collects fees, swaps on Uniswap, and transfers each share to its route. Nothing else runs against your wallet.',
-    values: ['collect', 'swap', 'transfer'],
-  },
-  {
-    what: 'Price guard',
-    how: 'A stock swap only executes when the pool delivers at least 90% of the Yahoo Finance price. Thin pools never eat your fees.',
-    values: ['90% of fair price'],
-  },
-  {
-    what: 'Page vaults',
-    how: 'Each page has its own wallet. Its key is encrypted at rest like a dev wallet key, and the vault is only ever swept to the wallet its verified owner binds.',
-    values: ['1 vault per page', 'AES-256-GCM'],
-  },
-  {
-    what: 'Owner control',
-    how: `Pause, resume, or delete your configuration from Telegram instantly. Deleting removes ${BRAND}'s access for good.`,
-    values: ['pause', 'resume', 'delete'],
-  },
+const SOL_MINT = 'So11111111111111111111111111111111111111112';
+const NVDAX = getXStock('NVDA');
+const SIGN_IN = ['youtube', 'github', 'x', 'instagram', 'facebook', 'tiktok', 'twitch'];
+
+const STATIONS = [
+  { key: 'key', icon: Key, title: 'The key', body: 'Encrypted the moment it arrives and stored encrypted. Decrypted only in memory, while a cycle runs.', value: 'AES-256-GCM' },
+  { key: 'swap', icon: Shield, title: 'The swap', body: 'The route must return 90% of the reference price, or that share is paid in SOL instead.', value: '90% floor' },
+  { key: 'vault', icon: Vault, title: 'The vault', body: 'Every page has a vault of its own, one per chain. Only its proven owner can sweep it.', value: '1 per page, per chain' },
+  { key: 'claim', icon: Verified, title: 'The claim', body: 'Proved by the platform itself, a DNS record or a code to the phone. No form, no ticket.', value: 'OAuth · DNS · code' },
+  { key: 'record', icon: Eye, title: 'The record', body: 'Every payment is a transaction anyone can open on Solscan, and every cycle leaves a receipt.', value: 'public, on chain' },
 ];
 
-const SCOPE = [
-  { call: 'collect', note: 'the fees waiting in the dev wallet', ok: true },
-  { call: 'swap', note: 'on Uniswap, behind the price guard', ok: true },
-  { call: 'transfer', note: 'each share to its route', ok: true },
-  { call: 'anything else', note: 'never runs', ok: false },
-];
-
-const ROUTES = ['holders', 'your wallets', 'burn address', 'treasury', 'page vaults'];
-
-/** The guard as a gauge: the pool price against fair price, with the floor marked at 90%. */
-function Guard() {
-  const nvda = getStock('NVDA');
+/** The five stations on one beam, a pulse travelling from the key to the record. */
+function Path() {
+  const still = useReducedMotion();
   return (
-    <div className="border-t border-line px-5 py-5">
-      <div className="flex items-center justify-between">
-        <span className="label">Price guard</span>
-        <span className="flex items-center gap-1.5 font-mono text-[11.5px] text-ink"><StockLogo address={null} size="h-4 w-4" text="text-[5px]" />ETH<Arrow className="h-3 w-3 text-mut" /><StockLogo address={nvda?.address} size="h-4 w-4" text="text-[5px]" />NVDA</span>
+    <Glass lit="top" className="relative mt-8 px-5 py-7 sm:px-8 sm:py-9">
+      <div className="relative">
+        {/* the beam, across on a wide screen */}
+        <div aria-hidden="true" className="absolute left-[10%] right-[10%] top-[21px] hidden h-[2px] lg:block">
+          <span className="beam absolute inset-0 rounded-full opacity-50" />
+          <span className="beam absolute inset-0 rounded-full opacity-70 blur-[6px]" />
+          {!still && (
+            <motion.span
+              className="absolute top-1/2 h-2.5 w-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-white shadow-[0_0_14px_#5FE3FF]"
+              initial={{ left: '0%' }} animate={{ left: ['0%', '100%'] }}
+              transition={{ duration: 4.2, repeat: Infinity, repeatDelay: 0.6, ease: [0.4, 0, 0.2, 1] }}
+            />
+          )}
+        </div>
+        {/* and down, on a narrow one */}
+        <div aria-hidden="true" className="absolute bottom-6 left-[21px] top-6 w-[2px] rounded-full opacity-60 lg:hidden" style={{ background: 'linear-gradient(180deg, #2FA8FF, #5FE3FF 45%, #7B5CFF)' }} />
+
+        <ol className="relative grid gap-7 lg:grid-cols-5 lg:gap-5">
+          {STATIONS.map((s, i) => {
+            const I = s.icon;
+            return (
+              <motion.li
+                key={s.key}
+                initial={{ opacity: 0, y: 14 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true, amount: 0.3 }}
+                transition={{ delay: i * 0.08, duration: 0.6, ease: EASE }}
+                className="flex gap-4 lg:block lg:text-center"
+              >
+                <span className="relative z-10 flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-white/10 bg-[rgba(5,7,12,0.9)] shadow-glow lg:mx-auto">
+                  <I className="h-5 w-5 text-cyan-500" />
+                </span>
+                <div className="min-w-0 lg:mt-5">
+                  <div className="flex items-baseline gap-2 lg:justify-center">
+                    <span className="font-mono text-[10.5px] text-dim">{String(i + 1).padStart(2, '0')}</span>
+                    <h3 className="text-[15px] font-medium text-ink">{s.title}</h3>
+                  </div>
+                  <p className="mt-1.5 text-[13px] leading-relaxed text-mut lg:mx-auto lg:max-w-[22ch]">{s.body}</p>
+                  <code className="mt-3 inline-block whitespace-nowrap rounded-full border border-white/10 bg-white/5 px-2.5 py-0.5 font-mono text-[11px] text-cyan-500">{s.value}</code>
+                </div>
+              </motion.li>
+            );
+          })}
+        </ol>
       </div>
-      <div className="relative mt-7 h-[6px] rounded-full bg-line">
-        <div className="absolute inset-y-0 left-0 w-[90%] rounded-l-full bg-down/40" />
-        <div className="absolute inset-y-0 left-[90%] right-0 rounded-r-full bg-hood-500" />
-        <div className="absolute -bottom-1.5 -top-1.5 left-[90%] w-px bg-ink" />
-        <span className="figure absolute -top-6 left-[90%] -translate-x-1/2 text-xs text-ink">90%</span>
+    </Glass>
+  );
+}
+
+/** The guard as a channel bar: what a route returns as a share of the reference price, the floor at 90%. */
+function Guard() {
+  return (
+    <Glass lit="left" className="flex h-full flex-col p-6 sm:p-7">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <span className="label">The fair-price guard</span>
+        <span className="flex items-center gap-1.5 font-mono text-[12px] text-ink">
+          <StockLogo address={SOL_MINT} meta={{ symbol: 'SOL', image: '/sol.png' }} size="h-5 w-5" text="text-[6px]" />SOL
+          <Arrow className="mx-0.5 h-3 w-3 text-mut" />
+          <StockLogo address={NVDAX?.mint} meta={{ symbol: 'NVDAx', image: NVDAX?.logo }} size="h-5 w-5" text="text-[6px]" />NVDAx
+        </span>
       </div>
-      <div className="mt-2.5 flex items-start justify-between gap-4 text-[12.5px] leading-snug">
-        <span className="text-mut">Pool below the floor:<br /><span className="text-ink/85">the cycle pays ETH instead</span></span>
-        <span className="text-right text-mut">At or above:<br /><span className="text-hood-600">the swap runs</span></span>
+      <h3 className="mt-5 text-[22px] font-medium leading-tight tracking-[-0.02em] text-ink">A thin pool never eats the fees.</h3>
+      <p className="mt-2 max-w-md text-[14px] leading-relaxed text-mut">Before a swap runs on Jupiter, what the route returns is compared to the reference price from Jupiter&apos;s price API. Below 90% of it the swap does not run: that share is paid in SOL, and the receipt says so.</p>
+
+      <div className="mt-10 flex-1">
+        <div className="relative h-3 rounded-full bg-white/[0.06]">
+          <div className="absolute inset-y-0 left-0 w-[90%] rounded-l-full bg-down/20" />
+          <motion.div
+            initial={{ scaleX: 0 }} whileInView={{ scaleX: 1 }} viewport={{ once: true }} transition={{ duration: 0.9, ease: EASE }}
+            className="beam absolute inset-y-0 left-[90%] right-0 origin-left rounded-r-full shadow-[0_0_18px_rgba(95,227,255,0.55)]"
+          />
+          <div className="absolute -bottom-2 -top-2 left-[90%] w-px bg-ink" />
+          <span className="figure absolute -top-7 left-[90%] -translate-x-1/2 font-mono text-xs text-ink">90%</span>
+        </div>
+        <div className="mt-3 flex items-start justify-between gap-4 text-[12.5px] leading-snug">
+          <span className="text-mut">Below the floor<br /><span className="text-ink/85">the share is paid in SOL</span></span>
+          <span className="text-right text-mut">At or above<br /><span className="text-cyan-500">the swap runs</span></span>
+        </div>
+        <div className="label mt-3 !text-[9.5px]">what the route returns, as a share of the reference price</div>
       </div>
-      <div className="label mt-3 !text-[9.5px]">pool price as a share of the Yahoo Finance price</div>
-    </div>
+
+      <p className="mt-6 border-t border-white/10 pt-4 text-[12.5px] leading-relaxed text-mut">Also on Robinhood Chain: there the reference is Yahoo Finance for a stock and DexScreener for a coin, and the fallback is ETH.</p>
+    </Glass>
+  );
+}
+
+/** How a page proves its owner: three ways, none of which leaves a door open. */
+function Proofs() {
+  const rows = [
+    {
+      icon: <span className="grid grid-cols-2 gap-1"><PlatformIcon platform="youtube" className="h-3.5 w-3.5" /><PlatformIcon platform="github" className="h-3.5 w-3.5" /><PlatformIcon platform="x" className="h-3.5 w-3.5" /><PlatformIcon platform="twitch" className="h-3.5 w-3.5" /></span>,
+      title: 'A sign-in with the platform',
+      body: 'Read only, for every platform below. The access token is used once, to read which pages the account runs, then dropped. It is never stored.',
+      extra: <span className="mt-2.5 flex flex-wrap gap-2">{SIGN_IN.map((k) => <PlatformIcon key={k} platform={k} className="h-4 w-4" />)}</span>,
+    },
+    {
+      icon: <PlatformIcon platform="domain" className="h-5 w-5" />,
+      title: 'A DNS record',
+      body: <>A TXT record on <code className="rounded-md border border-white/10 bg-white/[0.06] px-1.5 py-px font-mono text-[0.85em] text-ink">_delta.yourdomain.com</code>, which only whoever runs the domain can add.</>,
+    },
+    {
+      icon: <PlatformIcon platform="phone" className="h-5 w-5" />,
+      title: 'A code to the phone',
+      body: 'Six digits by WhatsApp or SMS. The number is only ever shown masked, and never put in a URL: a phone page has an address of its own.',
+      extra: <span className="mt-2.5 inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1 font-mono text-[12px] text-ink"><PlatformIcon platform="phone" className="h-3.5 w-3.5" />+33 • •• •• •• 78</span>,
+    },
+  ];
+  return (
+    <Glass lit="none" className="flex h-full flex-col p-6 sm:p-7">
+      <span className="label">How a page proves its owner</span>
+      <ul className="mt-5 flex-1 divide-y divide-white/10">
+        {rows.map((r) => (
+          <li key={r.title} className="flex gap-4 py-4 first:pt-0 last:pb-0">
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-white/10 bg-white/5">{r.icon}</span>
+            <div className="min-w-0">
+              <div className="text-[14.5px] font-medium text-ink">{r.title}</div>
+              <p className="mt-1 text-[13px] leading-relaxed text-mut">{r.body}</p>
+              {r.extra}
+            </div>
+          </li>
+        ))}
+      </ul>
+    </Glass>
   );
 }
 
@@ -72,64 +157,25 @@ export default function Security() {
     <div id="security" className="scroll-mt-20">
       <div className="grid items-end gap-6 lg:grid-cols-[1fr_auto]">
         <div className="max-w-2xl">
-          <div className="eyebrow mb-3">Security</div>
-          <h2 className="font-display text-3xl font-medium tracking-tight text-ink sm:text-4xl">Built so your keys stay yours</h2>
-          <p className="mt-3 text-[15px] leading-relaxed text-mut">{BRAND} handles a wallet key to automate on-chain actions, so it is designed around least privilege, encryption, a price guard, and full owner control.</p>
+          <div className="eyebrow mb-4">Security</div>
+          <h2 className="font-display text-[36px] font-medium leading-[1.05] tracking-[-0.03em] text-ink sm:text-[44px]">What protects the money.</h2>
+          <p className="mt-4 max-w-md text-[16px] leading-relaxed text-mut">A cycle uses a wallet key and moves real value. These are the rules it runs under, from the key to the receipt, and each one can be checked.</p>
         </div>
-        <div className="label lg:text-right">Specification<br /><span className="text-ink">{SPEC.length} guarantees</span></div>
+        <div className="label lg:text-right">Five guards<br /><span className="text-ink">one beam, key to receipt</span></div>
       </div>
 
-      <div className="mt-7 grid gap-3 lg:grid-cols-12">
-        {/* The sheet */}
-        <div className="frame flex flex-col overflow-hidden lg:col-span-8">
-          <div className="label hidden grid-cols-[34px_130px_1fr_150px] gap-4 border-b border-line px-5 py-2.5 md:grid">
-            <span>No</span><span>Guarantee</span><span>How it is enforced</span><span className="text-right">Value</span>
-          </div>
-          <ol className="grid flex-1 divide-y divide-line lg:auto-rows-fr">
-            {SPEC.map((s, i) => (
-              <li key={s.what} className="grid grid-cols-[34px_1fr] content-center gap-x-4 gap-y-2 px-5 py-4 md:grid-cols-[34px_130px_1fr_150px]">
-                <span className="figure pt-px text-sm text-mut">{String(i + 1).padStart(2, '0')}</span>
-                <h3 className="text-[15px] font-semibold leading-snug text-ink">{s.what}</h3>
-                <div className="col-start-2 text-sm leading-relaxed text-mut md:col-start-auto">
-                  {s.how}
-                </div>
-                <div className="col-start-2 flex flex-wrap content-start gap-1.5 md:col-start-auto md:justify-end">
-                  {s.values.map((v) => <code key={v} className="h-fit whitespace-nowrap rounded border border-line bg-ground px-1.5 py-0.5 font-mono text-[11.5px] text-hood-600">{v}</code>)}
-                </div>
-              </li>
-            ))}
-          </ol>
-        </div>
+      <Path />
 
-        {/* The scope of the key */}
-        <div className="frame flex flex-col overflow-hidden lg:col-span-4">
-          <div className="label border-b border-line px-5 py-2.5">What the dev wallet key is used for</div>
-          <div className="flex-1 px-5 py-5">
-            <div className="font-mono text-[12.5px] text-ink">dev wallet key</div>
-            <ul className="relative ml-[5px] mt-1 border-l border-line">
-              {SCOPE.map((s) => (
-                <li key={s.call} className="relative pl-6 pt-4">
-                  <span className="absolute left-0 top-[27px] h-px w-4 bg-line" />
-                  <div className="flex items-center justify-between gap-3">
-                    <code className={`font-mono text-[12.5px] ${s.ok ? 'text-hood-600' : 'text-mut line-through decoration-down/70'}`}>{s.call}</code>
-                    {s.ok
-                      ? <span className="label flex items-center gap-1 !text-[9.5px] !text-hood-600"><Check className="h-3 w-3" />runs</span>
-                      : <span className="label flex items-center gap-1 !text-[9.5px] !text-down"><Blocked className="h-3 w-3" />blocked</span>}
-                  </div>
-                  <div className="mt-0.5 text-[13px] text-mut">{s.note}</div>
-                  {s.call === 'transfer' && (
-                    <div className="mt-2 flex flex-wrap gap-1">
-                      {ROUTES.map((r) => <span key={r} className="rounded border border-line px-1.5 py-px font-mono text-[10.5px] text-ink/80">{r}</span>)}
-                    </div>
-                  )}
-                </li>
-              ))}
-            </ul>
-          </div>
-          <Guard />
-          <p className="border-t border-line bg-ground/60 px-5 py-3 text-[13px] leading-relaxed text-mut">
-            <span className="text-ink">Use a dedicated wallet</span>, funded with just what a cycle needs, never your main holdings.
-          </p>
+      <div className="mt-3 grid gap-3 lg:grid-cols-12">
+        <div className="lg:col-span-7"><Guard /></div>
+        <div className="lg:col-span-5"><Proofs /></div>
+      </div>
+
+      <div className="mt-3 flex flex-col gap-3 rounded-2xl border border-white/10 bg-white/[0.03] px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+        <p className="text-[13.5px] leading-relaxed text-mut"><span className="text-ink">Use a dedicated wallet</span>, the one that created the coin, funded with what cycles need. Never your main holdings.</p>
+        <div className="flex shrink-0 flex-wrap items-center gap-1.5">
+          {['pause', 'resume', 'delete'].map((v) => <code key={v} className="rounded-full border border-white/10 bg-white/5 px-2.5 py-0.5 font-mono text-[11px] text-ink/85">{v}</code>)}
+          <span className="ml-1 text-[12.5px] text-mut">any time, from Telegram or the dashboard. Deleting ends {BRAND}&apos;s access.</span>
         </div>
       </div>
     </div>

@@ -6,6 +6,12 @@ import TokenCard from './TokenCard';
 import { Bell, CaretDown, Chart, Check, Coins, OpeningBell, Timer, Warning } from '../Icons';
 import { STOCKS, LIQUID_TICKERS, getStock } from '../../lib/stocks';
 
+// The beam, running down instead of across: the lit edge of a toast.
+const BEAM_DOWN = 'linear-gradient(180deg, #2FA8FF 0%, #5FE3FF 50%, #7B5CFF 100%)';
+// The selected option of a segmented control: a lit glass pill.
+const segOn = 'bg-white/[0.09] text-ink shadow-[inset_0_0_0_1px_rgba(95,227,255,0.35),0_0_18px_-6px_rgba(47,168,255,0.55)]';
+const segOff = 'text-mut hover:bg-white/[0.04] hover:text-ink';
+
 // ---------- toasts ----------
 const ToastCtx = createContext(() => {});
 export function ToastProvider({ children }) {
@@ -20,11 +26,11 @@ export function ToastProvider({ children }) {
       {children}
       <div className="pointer-events-none fixed bottom-5 left-1/2 z-[70] flex w-[min(92vw,440px)] -translate-x-1/2 flex-col gap-1.5" role="status" aria-live="polite">
         {items.map((t) => {
-          const tone = t.kind === 'ok' ? { bar: 'bg-hood-500', icon: 'text-hood-500', word: 'Done' } : t.kind === 'warn' ? { bar: 'bg-gold-400', icon: 'text-gold-400', word: 'Note' } : { bar: 'bg-down', icon: 'text-down', word: 'Error' };
+          const tone = t.kind === 'ok' ? { edge: BEAM_DOWN, glow: 'rgba(47,168,255,0.75)', icon: 'text-cyan-500', word: 'Done' } : t.kind === 'warn' ? { edge: '#F6C343', glow: 'rgba(246,195,67,0.6)', icon: 'text-gold-400', word: 'Note' } : { edge: '#FF5C33', glow: 'rgba(255,92,51,0.6)', icon: 'text-down', word: 'Error' };
           const Icon = t.kind === 'ok' ? Check : Warning;
           return (
-            <div key={t.id} className="animate-feedin relative flex items-start gap-3 overflow-hidden rounded-xl border border-line bg-paper py-2.5 pl-4 pr-4 shadow-soft">
-              <span className={`absolute inset-y-0 left-0 w-[2px] ${tone.bar}`} />
+            <div key={t.id} className="panel animate-feedin flex items-start gap-3 overflow-hidden bg-[rgba(9,12,19,0.9)] py-3 pl-4 pr-4 shadow-soft">
+              <span className="absolute inset-y-2.5 left-0 w-[2px] rounded-full" style={{ background: tone.edge, boxShadow: `0 0 10px ${tone.glow}` }} />
               <Icon className={`mt-0.5 h-4 w-4 shrink-0 ${tone.icon}`} />
               <span className="min-w-0 flex-1 text-[13px] leading-snug text-ink">{t.text}</span>
               <span className="label mt-0.5 shrink-0">{tone.word}</span>
@@ -39,18 +45,18 @@ export const useToast = () => useContext(ToastCtx);
 
 // ---------- primitives ----------
 // The ring every control shows when it is reached with the keyboard.
-export const focusCls = 'outline-none focus-visible:ring-1 focus-visible:ring-hood-500 focus-visible:ring-offset-2 focus-visible:ring-offset-ground';
+export const focusCls = 'outline-none focus-visible:ring-1 focus-visible:ring-cyan-500/70 focus-visible:ring-offset-2 focus-visible:ring-offset-ground';
 
 export function Card({ title, eyebrow, aside, children, className = '', tone = 'paper' }) {
-  // One box language: the frame for the card that leads, the plain panel for the rest.
-  const base = tone === 'ink' || tone === 'glow' ? 'frame' : 'panel';
+  // Glass for every card: the one that leads carries the lit edge.
+  const lead = tone === 'ink' || tone === 'glow' || tone === 'gold';
   return (
-    <section className={`${base} min-w-0 ${className}`}>
+    <section className={`${lead ? 'frame' : 'panel'} min-w-0 ${className}`}>
       {(title || aside || eyebrow) && (
-        <div className="flex items-center justify-between gap-3 border-b border-line px-5 py-3.5">
+        <div className="flex items-center justify-between gap-3 border-b border-white/10 px-5 py-3.5">
           <div className="min-w-0">
-            {eyebrow && <div className={`label ${tone === 'gold' ? 'text-gold-600' : ''}`}>{eyebrow}</div>}
-            {title && <h3 className="mt-0.5 truncate font-display text-base font-medium tracking-tight text-ink">{title}</h3>}
+            {eyebrow && <div className={`label ${lead ? 'text-cyan-500' : ''}`}>{eyebrow}</div>}
+            {title && <h3 className="mt-1 truncate font-display text-base font-medium tracking-[-0.02em] text-ink">{title}</h3>}
           </div>
           {aside}
         </div>
@@ -63,16 +69,15 @@ export function Card({ title, eyebrow, aside, children, className = '', tone = '
 /** Segmented control. An option may carry `icon` (a component from Icons.js). */
 export function Seg({ options, value, onChange, size = 'md' }) {
   return (
-    <div role="radiogroup" className="inline-flex max-w-full flex-wrap gap-px overflow-hidden rounded-xl border border-line bg-line">
+    <div role="radiogroup" className="inline-flex max-w-full flex-wrap gap-1 rounded-2xl border border-white/10 bg-white/[0.03] p-1">
       {options.map((o) => {
         const on = value === o.value;
         const Icon = o.icon;
         return (
           <button key={o.value} type="button" role="radio" aria-checked={on} onClick={() => onChange(o.value)} title={o.title}
-            className={`relative inline-flex flex-1 items-center justify-center gap-1.5 whitespace-nowrap px-3 ${size === 'sm' ? 'py-1.5 text-xs' : 'py-2 text-[13px]'} font-medium transition-colors focus-visible:z-10 focus-visible:outline focus-visible:outline-1 focus-visible:-outline-offset-1 focus-visible:outline-hood-500 ${on ? 'bg-tile text-ink' : 'bg-ground text-mut hover:bg-paper hover:text-ink'}`}>
-            {Icon && <Icon className={`h-3.5 w-3.5 shrink-0 ${on ? 'text-hood-500' : ''}`} />}
+            className={`relative inline-flex flex-1 items-center justify-center gap-1.5 whitespace-nowrap rounded-xl px-3 ${size === 'sm' ? 'py-1.5 text-xs' : 'py-2 text-[13px]'} font-medium outline-none transition-colors focus-visible:ring-1 focus-visible:ring-cyan-500/70 ${on ? segOn : segOff}`}>
+            {Icon && <Icon className={`h-3.5 w-3.5 shrink-0 ${on ? 'text-cyan-500' : ''}`} />}
             {o.label}
-            {on && <span className="absolute inset-x-0 bottom-0 h-[2px] bg-hood-500" />}
           </button>
         );
       })}
@@ -82,15 +87,15 @@ export function Seg({ options, value, onChange, size = 'md' }) {
 
 export function Toggle({ checked, onChange, label, hint }) {
   return (
-    <button type="button" role="switch" aria-checked={checked} onClick={() => onChange(!checked)} className={`group flex w-full items-start justify-between gap-4 rounded-xl border border-line bg-ground px-3.5 py-3 text-left transition-colors hover:border-hood-300 ${focusCls}`}>
+    <button type="button" role="switch" aria-checked={checked} onClick={() => onChange(!checked)} className={`group flex w-full items-start justify-between gap-4 rounded-2xl border border-white/10 bg-white/[0.03] px-3.5 py-3 text-left transition-colors hover:border-white/20 hover:bg-white/[0.05] ${focusCls}`}>
       <span className="min-w-0">
         <span className="block text-[13px] font-medium text-ink">{label}</span>
         {hint && <span className="mt-0.5 block text-xs leading-snug text-mut">{hint}</span>}
       </span>
       <span className="flex shrink-0 items-center gap-2 pt-0.5">
-        <span className={`font-mono text-[10px] uppercase tracking-[0.14em] ${checked ? 'text-hood-600' : 'text-mut'}`}>{checked ? 'on' : 'off'}</span>
-        <span className={`relative h-[18px] w-8 rounded-[5px] border transition-colors ${checked ? 'border-hood-500 bg-hood-200' : 'border-line bg-tile'}`}>
-          <span className={`absolute top-[2px] h-3 w-3 rounded-[3px] transition-all ${checked ? 'left-[16px] bg-hood-500' : 'left-[2px] bg-mut'}`} />
+        <span className={`font-mono text-[10px] uppercase tracking-[0.14em] ${checked ? 'text-cyan-500' : 'text-dim'}`}>{checked ? 'on' : 'off'}</span>
+        <span className={`relative h-5 w-9 rounded-full border transition-all ${checked ? 'beam border-transparent shadow-[0_0_14px_rgba(47,168,255,0.45)]' : 'border-white/10 bg-white/[0.08]'}`}>
+          <span className={`absolute top-[2px] h-3.5 w-3.5 rounded-full transition-all ${checked ? 'left-[18px] bg-white shadow-[0_0_8px_rgba(255,255,255,0.6)]' : 'left-[2px] bg-mut'}`} />
         </span>
       </span>
     </button>
@@ -107,10 +112,13 @@ export function Field({ label, hint, children }) {
   );
 }
 
-export const inputCls = 'w-full rounded-xl border border-line bg-ground px-3 py-2 font-mono text-[13px] text-ink outline-none transition-colors placeholder:text-mut/60 hover:border-hood-300 focus:border-hood-500 focus:ring-1 focus:ring-hood-500/40';
+export const inputCls = 'w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 font-mono text-[13px] text-ink outline-none transition-colors placeholder:text-dim hover:border-white/20 focus:border-cyan-500/60 focus:ring-2 focus:ring-hood-500/20';
 
 export function Button({ children, variant = 'primary', busy, className = '', ...rest }) {
-  const cls = variant === 'primary' ? 'btn-primary' : variant === 'ink' ? 'btn-ink' : variant === 'danger' ? 'inline-flex items-center justify-center gap-2 rounded-xl border border-red-300 bg-transparent px-5 py-2.5 text-sm font-semibold text-red-600 transition-colors hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50' : 'btn-ghost disabled:cursor-not-allowed disabled:opacity-50';
+  const cls = variant === 'primary' ? 'btn-primary'
+    : variant === 'ink' ? 'btn-ink disabled:cursor-not-allowed disabled:opacity-50'
+      : variant === 'danger' ? 'inline-flex items-center justify-center gap-2 rounded-full border border-down/40 bg-down/[0.06] px-5 py-2.5 text-sm font-medium text-down transition-colors hover:border-down/70 hover:bg-down/[0.12] disabled:cursor-not-allowed disabled:opacity-50'
+        : 'btn-ghost disabled:cursor-not-allowed disabled:opacity-50';
   return (
     <button type="button" disabled={busy || rest.disabled} className={`${cls} ${focusCls} ${busy ? 'opacity-60' : ''} ${className}`} {...rest}>
       {busy ? <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-current border-t-transparent" /> : null}
@@ -120,10 +128,11 @@ export function Button({ children, variant = 'primary', busy, className = '', ..
 }
 
 // The colour names the sliders used to take, as the colours they stood for.
-const SLIDER_TONES = { 'accent-hood-500': '#2FA8FF', 'accent-ink': '#F4F5F4', 'accent-orange-500': '#FF7A1A', 'accent-gold-400': '#F6C343' };
-const thumbCls = '[&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:w-[7px] [&::-webkit-slider-thumb]:cursor-grab [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-[2px] [&::-webkit-slider-thumb]:border [&::-webkit-slider-thumb]:border-ground [&::-webkit-slider-thumb]:bg-ink [&::-moz-range-thumb]:h-4 [&::-moz-range-thumb]:w-[7px] [&::-moz-range-thumb]:cursor-grab [&::-moz-range-thumb]:rounded-[2px] [&::-moz-range-thumb]:border [&::-moz-range-thumb]:border-ground [&::-moz-range-thumb]:bg-ink [&::-moz-range-track]:bg-transparent focus-visible:[&::-webkit-slider-thumb]:bg-hood-500 focus-visible:[&::-moz-range-thumb]:bg-hood-500';
+const SLIDER_TONES = { 'accent-hood-500': '#2FA8FF', 'accent-ink': '#F3F5F9', 'accent-orange-500': '#FF7A1A', 'accent-gold-400': '#F6C343' };
+// A white bead lit in the colour of the slider (`--tone`, set on the input).
+const thumbCls = '[&::-webkit-slider-thumb]:h-3.5 [&::-webkit-slider-thumb]:w-3.5 [&::-webkit-slider-thumb]:cursor-grab [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-ground [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:shadow-[0_0_0_1px_var(--tone),0_0_12px_var(--tone)] [&::-moz-range-thumb]:h-3.5 [&::-moz-range-thumb]:w-3.5 [&::-moz-range-thumb]:cursor-grab [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:border-2 [&::-moz-range-thumb]:border-ground [&::-moz-range-thumb]:bg-white [&::-moz-range-thumb]:shadow-[0_0_0_1px_var(--tone),0_0_12px_var(--tone)] [&::-moz-range-track]:bg-transparent focus-visible:[&::-webkit-slider-thumb]:bg-cyan-500 focus-visible:[&::-moz-range-thumb]:bg-cyan-500';
 
-/** Slider on a ruler: a hairline track filled up to the value, ten ticks under it, the value in mono. */
+/** Slider as a channel of light: the track lit up to the value, a glowing bead, the value in mono. */
 export function Slider({ label, value, min = 0, max = 100, step = 1, onChange, format = (v) => `${v}%`, color = '#2FA8FF', icon: Icon }) {
   const tone = SLIDER_TONES[color] || color;
   const at = max > min ? Math.min(100, Math.max(0, ((value - min) / (max - min)) * 100)) : 0;
@@ -134,11 +143,8 @@ export function Slider({ label, value, min = 0, max = 100, step = 1, onChange, f
         <span className="font-mono text-xs tabular-nums text-ink">{format(value)}</span>
       </div>
       <input type="range" min={min} max={max} step={step} value={value} onChange={(e) => onChange(Number(e.target.value))} aria-label={typeof label === 'string' ? label : undefined}
-        className={`mt-1 block h-4 w-full cursor-pointer appearance-none bg-transparent outline-none ${thumbCls}`}
-        style={{ background: `linear-gradient(90deg, ${tone} ${at}%, #24272B ${at}%) center / 100% 2px no-repeat` }} />
-      <div className="flex justify-between px-[3px]" aria-hidden="true">
-        {Array.from({ length: 11 }, (_, i) => <span key={i} className={`w-px bg-line ${i % 5 === 0 ? 'h-1.5' : 'h-1'}`} />)}
-      </div>
+        className={`mt-1.5 block h-4 w-full cursor-pointer appearance-none bg-transparent outline-none ${thumbCls}`}
+        style={{ '--tone': tone, background: `linear-gradient(90deg, ${tone} ${at}%, rgba(255,255,255,0.1) ${at}%) center / 100% 3px no-repeat` }} />
     </div>
   );
 }
@@ -193,33 +199,32 @@ export function StockPicker({ value, onChange, allowEth = true, allowAddress = t
 
   return (
     <div className="relative">
-      <button type="button" aria-expanded={open} onClick={() => setOpen((o) => !o)} className={`flex w-full items-center gap-3 rounded-xl border bg-ground px-3 py-2 text-left transition-colors hover:border-hood-300 ${open ? 'border-hood-500' : 'border-line'} ${focusCls}`}>
-        {selected ? <StockLogo address={selected.address} meta={{ symbol: selected.symbol, image: selected.image }} size="h-8 w-8" text="text-[9px]" /> : <span className="h-8 w-8 shrink-0 rounded-full border border-dashed border-line" />}
+      <button type="button" aria-expanded={open} onClick={() => setOpen((o) => !o)} className={`flex w-full items-center gap-3 rounded-xl border bg-black/30 px-3 py-2 text-left transition-colors hover:border-white/20 ${open ? 'border-cyan-500/60' : 'border-white/10'} ${focusCls}`}>
+        {selected ? <StockLogo address={selected.address} meta={{ symbol: selected.symbol, image: selected.image }} size="h-8 w-8" text="text-[9px]" /> : <span className="h-8 w-8 shrink-0 rounded-full border border-dashed border-white/15" />}
         <span className="min-w-0 flex-1">
-          <span className="block font-mono text-[13px] font-semibold text-ink">{selected ? selected.symbol : 'Pick a token'}</span>
+          <span className="block font-mono text-[13px] font-medium text-ink">{selected ? selected.symbol : 'Pick a token'}</span>
           <span className="block truncate text-xs text-mut">{selected ? selected.name : 'A stock, ETH, or any token by contract address'}</span>
         </span>
-        <CaretDown className={`h-3.5 w-3.5 shrink-0 text-mut transition-transform ${open ? 'rotate-180' : ''}`} />
+        <CaretDown className={`h-3.5 w-3.5 shrink-0 text-mut transition-transform ${open ? 'rotate-180 text-cyan-500' : ''}`} />
       </button>
       {open && (
-        <div className="absolute left-0 right-0 top-full z-20 mt-1.5 min-w-[320px] overflow-hidden rounded-2xl border border-line bg-paper shadow-soft">
+        <div className="absolute left-0 right-0 top-full z-20 mt-1.5 min-w-[320px] overflow-hidden rounded-2xl border border-white/10 bg-[rgba(9,12,19,0.96)] shadow-soft backdrop-blur-xl">
           {allowAddress && (
-            <div className="grid grid-cols-2 gap-px border-b border-line bg-line">
+            <div className="grid grid-cols-2 gap-1 border-b border-white/[0.07] p-1.5">
               {[['stocks', Chart, `Stocks${allowEth ? ' and ETH' : ''}`], ['custom', Coins, 'Any token, by address']].map(([k, Icon, text]) => (
-                <button key={k} type="button" onClick={() => setTab(k)} className={`relative flex items-center justify-center gap-1.5 px-2 py-2 text-xs font-medium transition-colors ${tab === k ? 'bg-tile text-ink' : 'bg-ground text-mut hover:text-ink'}`}>
-                  <Icon className={`h-3.5 w-3.5 ${tab === k ? 'text-hood-500' : ''}`} />{text}
-                  {tab === k && <span className="absolute inset-x-0 bottom-0 h-[2px] bg-hood-500" />}
+                <button key={k} type="button" onClick={() => setTab(k)} className={`flex items-center justify-center gap-1.5 rounded-xl px-2 py-1.5 text-xs font-medium transition-colors ${tab === k ? segOn : segOff}`}>
+                  <Icon className={`h-3.5 w-3.5 ${tab === k ? 'text-cyan-500' : ''}`} />{text}
                 </button>
               ))}
             </div>
           )}
           {tab === 'custom' ? (
             <div className="p-3">
-              <p className="mb-2 text-xs text-mut">Any ERC-20 on Robinhood Chain: a memecoin, a partner token, your own coin. Paste its contract address.</p>
+              <p className="mb-2 text-xs text-mut">Any token by its contract address: a memecoin, a partner token, your own coin.</p>
               <input autoFocus value={q} onChange={(e) => setQ(e.target.value.trim())} placeholder="0x… contract address" className={inputCls} />
               {isAddr ? (
                 <div className="mt-2">
-                  {probe?.loading || !probe ? <div className="flex items-center gap-2 px-2 py-3 text-xs text-mut"><span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-line border-t-hood-500" /> Looking up {q.trim().slice(0, 10)}… on chain, DexScreener and GeckoTerminal</div>
+                  {probe?.loading || !probe ? <div className="flex items-center gap-2 px-2 py-3 text-xs text-mut"><span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white/10 border-t-cyan-500" /> Looking up {q.trim().slice(0, 10)}… on chain, DexScreener and GeckoTerminal</div>
                     : probe.error ? <div className="px-2 py-3 text-xs text-down">{probe.error}</div>
                     : <TokenCard token={probe} compact action={{ label: 'Use this token', onClick: () => { onChange(q.trim()); setOpen(false); } }} />}
                 </div>
@@ -227,22 +232,22 @@ export function StockPicker({ value, onChange, allowEth = true, allowAddress = t
             </div>
           ) : (
           <>
-          <input autoFocus value={q} onChange={(e) => setQ(e.target.value)} placeholder={allowAddress ? 'Search a ticker or a company, or paste an address' : 'Search a ticker or a company'} className="w-full border-b border-line bg-transparent px-3 py-2.5 text-[13px] text-ink outline-none placeholder:text-mut/60 focus:border-hood-500" />
-          <div className="max-h-[420px] divide-y divide-line/60 overflow-y-auto">
+          <input autoFocus value={q} onChange={(e) => setQ(e.target.value)} placeholder={allowAddress ? 'Search a ticker or a company, or paste an address' : 'Search a ticker or a company'} className="w-full border-b border-white/[0.07] bg-transparent px-3.5 py-2.5 text-[13px] text-ink outline-none placeholder:text-dim focus:border-cyan-500/50" />
+          <div className="max-h-[420px] overflow-y-auto p-1.5">
             {allowEth && !q && (
-              <button type="button" onClick={() => { onChange('ETH'); setOpen(false); }} className="flex w-full items-center gap-3 px-3 py-2 text-left transition-colors hover:bg-tile">
-                <StockLogo address="0x0000000000000000000000000000000000000000" size="h-6 w-6" text="text-[7px]" /><span className="w-14 font-mono text-[13px] font-semibold text-ink">ETH</span><span className="min-w-0 flex-1 truncate text-xs text-mut">Ether, no conversion</span>
+              <button type="button" onClick={() => { onChange('ETH'); setOpen(false); }} className="flex w-full items-center gap-3 rounded-xl px-2.5 py-2 text-left transition-colors hover:bg-white/[0.05]">
+                <StockLogo address="0x0000000000000000000000000000000000000000" size="h-6 w-6" text="text-[7px]" /><span className="w-14 font-mono text-[13px] font-medium text-ink">ETH</span><span className="min-w-0 flex-1 truncate text-xs text-mut">Ether, no conversion</span>
               </button>
             )}
             {list.map((s) => (
-              <button key={s.ticker} type="button" onClick={() => { onChange(s.address); setOpen(false); }} className="flex w-full items-center gap-3 px-3 py-2 text-left transition-colors hover:bg-tile">
+              <button key={s.ticker} type="button" onClick={() => { onChange(s.address); setOpen(false); }} className="flex w-full items-center gap-3 rounded-xl px-2.5 py-2 text-left transition-colors hover:bg-white/[0.05]">
                 <StockLogo address={s.address} size="h-6 w-6" text="text-[7px]" />
-                <span className="w-14 font-mono text-[13px] font-semibold text-ink">{s.ticker}</span>
+                <span className="w-14 font-mono text-[13px] font-medium text-ink">{s.ticker}</span>
                 <span className="min-w-0 flex-1 truncate text-xs text-mut">{s.name}</span>
-                {LIQUID_TICKERS.includes(s.ticker) && <span className="label flex items-center gap-1 !text-[9px] text-hood-600"><span className="h-1 w-1 rounded-full bg-hood-500" />liquid</span>}
+                {LIQUID_TICKERS.includes(s.ticker) && <span className="label flex items-center gap-1 !text-[9px] text-cyan-500"><span className="h-1 w-1 rounded-full bg-cyan-500 shadow-[0_0_6px_#5FE3FF]" />liquid</span>}
               </button>
             ))}
-            {list.length === 0 && !isAddr && <div className="px-4 py-4 text-center text-xs text-mut">No ticker matches. Looking for another token? Use the "Any token" tab.</div>}
+            {list.length === 0 && !isAddr && <div className="px-4 py-4 text-center text-xs text-mut">No ticker matches. Looking for another token? Use the &quot;Any token&quot; tab.</div>}
           </div>
           </>
           )}

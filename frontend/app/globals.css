@@ -227,14 +227,12 @@ body {
 }
 
 /* Studio canvas */
-.bm-flow { animation: peek-dash 1.6s linear infinite; }
 .react-flow__node { cursor: grab; }
 .react-flow__node.dragging { cursor: grabbing; }
-.react-flow__controls { box-shadow: none !important; border: 1px solid #24272B; border-radius: 12px; overflow: hidden; }
-.react-flow__controls-button { border-bottom: 1px solid #24272B !important; background: #101112 !important; fill: #F4F5F4 !important; }
-.react-flow__controls-button:hover { background: #191B1D !important; }
+.react-flow__controls { box-shadow: none !important; border: 1px solid rgba(255,255,255,0.1); border-radius: 14px; overflow: hidden; backdrop-filter: blur(12px); }
+.react-flow__controls-button { border-bottom: 1px solid rgba(255,255,255,0.08) !important; background: rgba(11,15,23,0.8) !important; fill: #F3F5F9 !important; }
+.react-flow__controls-button:hover { background: rgba(47,168,255,0.12) !important; }
 .react-flow__handle { pointer-events: none; }
-@media (prefers-reduced-motion: reduce) { .bm-flow { animation: none; } }
 
 /* Studio nodes: promote to their own layer so images do not repaint while dragging */
 .react-flow__node { will-change: transform; }

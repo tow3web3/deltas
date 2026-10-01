@@ -1,169 +1,185 @@
-// How it works, drawn as the route a fee takes: out of the coin into the dev
-// wallet, through the routing, into each destination. One map, three stops.
-// On a wide screen the map runs across the frame with the three stops written
-// under the part of the route they describe; on a narrow one the same map is
-// cut at the stops and each piece sits above its text.
+'use client';
+
+// How it works, drawn as the route a fee takes on Solana: a pump.fun coin's
+// trades set a creator fee aside, DELTA collects it into the dev wallet, the
+// routing splits it into channels of light, every destination is paid. The
+// drawing runs across the page on the ground itself (no panel), in three
+// stretches; each step is written in glass under its stretch. On a narrow
+// screen the same route runs down a trunk and branches into the destinations.
+import { motion, useReducedMotion } from 'motion/react';
+import { PlatformIcon, Burn } from './Icons';
+import StockLogo from './StockLogo';
+import { Glass, FlowChip, BEAM, EASE } from './ui/Light';
+import { Fan } from './RouteMap';
 import { BRAND } from '../lib/brand';
-import { getStock } from '../lib/stocks';
+import { getXStock } from '../lib/xstocks';
 
-const D = 'var(--font-display), var(--font-sans), system-ui, sans-serif';
-const F = 'var(--font-sans), system-ui, sans-serif';
-const M = 'var(--font-mono), ui-monospace, monospace';
-const GREEN = '#2FA8FF', MINT = '#4DB8FF', INK = '#F4F5F4', MUT = '#8A9099', LINE = '#2A2E33', PAPER = '#101112', DEEP = '#1A3F73', GOLD = '#F6C343';
+const VBEAM = 'linear-gradient(180deg, #2FA8FF 0%, #5FE3FF 55%, #7B5CFF 100%)';
+const GLOW = '0 0 16px rgba(47,168,255,0.55)';
 
-// The map is 1056 wide. Each stop owns a stretch of it.
-const ZONES = [{ x: 0, y: 68, w: 276, h: 204 }, { x: 276, y: 14, w: 368, h: 292 }, { x: 636, y: 14, w: 420, h: 292 }];
-const H = 320;
+function XLogo({ t, size = 'h-5 w-5' }) {
+  const s = getXStock(t);
+  return <StockLogo address={s.mint} meta={{ symbol: s.symbol, image: s.logo }} size={size} text="text-[5px]" />;
+}
+// eslint-disable-next-line @next/next/no-img-element
+const Sol = ({ className = 'h-5 w-5' }) => <img src="/sol.png" alt="" className={`shrink-0 rounded-full ${className}`} />;
+
+// Where one cycle of fees goes. The handles are placeholders on purpose.
+const DESTS = [
+  { key: 'holders', share: 40, label: 'Holders', sub: 'paid in NVDAx, pro rata', icon: <XLogo t="NVDA" /> },
+  { key: 'youtube', share: 20, label: '@yourchannel', sub: 'YouTube · its own vault', icon: <PlatformIcon platform="youtube" className="h-5 w-5" /> },
+  { key: 'github', share: 10, label: 'your-project', sub: 'GitHub · claimed, paid direct', icon: <PlatformIcon platform="github" className="h-5 w-5" /> },
+  { key: 'burn', share: 10, label: 'Buyback and burn', sub: 'bought on Jupiter, burned', icon: <Burn className="h-5 w-5 text-orange-700" /> },
+  { key: 'treasury', share: 10, label: 'Treasury', sub: 'held in SPYx', icon: <XLogo t="SPY" /> },
+  { key: 'wallet', share: 10, label: 'Your wallet', sub: 'paid in SOL', icon: <Sol /> },
+];
+const ROW = 58;
+const GAP = 8;
+const H = DESTS.length * ROW + (DESTS.length - 1) * GAP;
+const ENDS = DESTS.map((d, i) => ({ key: d.key, share: d.share, at: (i * (ROW + GAP) + ROW / 2) / H }));
+// The narrow layout: the trunk runs down at this x, through the coin's centre.
+const TRUNK = 24;
 
 const STEPS = [
-  { n: '01', tag: 'Fees in', title: 'Link any coin', body: `Any ERC-20 on Robinhood Chain plugs in, from any launchpad. Its fees land in the dev wallet as stock tokens or ETH, and every cycle ${BRAND} sweeps everything above a small gas reserve.` },
-  { n: '02', tag: 'The routing', title: 'Draw the routing', body: 'Give each route its share: holders, your own wallets, a buyback and burn, a treasury, and any page on the internet. A YouTube channel, a GitHub account or a domain is a route like any other.' },
-  { n: '03', tag: 'Paid out', title: 'Every cycle pays each route', body: 'Holders and wallets are paid on chain. Each page gets its own vault, visible to anyone, and its owner claims by signing in with the platform and connecting a wallet.' },
+  { n: '01', tag: 'Fees in', title: 'Every trade sets a fee aside', body: `A coin launched on pump.fun sets a creator fee aside on every trade, on the bonding curve and on PumpSwap after it graduates. Each cycle ${BRAND} collects it into the coin's dev wallet and keeps 0.02 SOL for fees.` },
+  { n: '02', tag: 'The routing', title: 'The routing splits it', body: 'Each destination has its share: holders, wallets, a buyback and burn, a treasury in xStocks, any page on the internet. Swaps go through Jupiter; one that would return less than 90% of the fair price pays that share in SOL instead.' },
+  { n: '03', tag: 'Paid out', title: 'Every destination is paid', body: 'Holders are paid in batches of about 18 transfers per transaction, a hundred in a few seconds. Each page fills its own vault until its owner proves it; from then on it is paid directly. Every cycle leaves a receipt.' },
 ];
 
-const ROUTES = [
-  { y: 48, share: '50%', logo: getStock('NVDA')?.logo, stock: true, name: 'Holders', sub: 'paid in NVDA, by balance and loyalty', state: 'Paid on chain' },
-  { y: 104, share: '15%', logo: '/eth.svg', stock: true, name: 'Your wallets', sub: '0x3d17…9a02', state: 'Paid on chain' },
-  { y: 160, share: '10%', logo: '/logos/tokens/PONS.png', name: 'Buyback and burn', sub: 'bought back, then burned', state: 'Burned' },
-  { y: 216, share: '10%', logo: getStock('SPY')?.logo, stock: true, name: 'Treasury', sub: 'stocks, in a wallet you control', state: 'Held' },
-  { y: 272, share: '15%', logo: '/logos/platforms/youtube.svg', name: 'youtube.com/@yourchannel', sub: 'its own vault, open to anyone', state: 'Owner claims', page: true },
-];
+// The stage and the steps share one set of columns, so each step sits under its stretch.
+const COLS = 'lg:grid-cols-[minmax(0,1fr)_minmax(0,0.7fr)_minmax(0,1.1fr)]';
 
-function Disc({ x, y, r, href, clip, stock = false, ring = LINE, children }) {
-  const pad = stock ? r * 0.2 : 0;
+/** A beam of light in the page, with pulses running along it. `pellet` 'sol' sends small SOL coins instead of white dots. */
+function Beam({ vertical = false, pellet = 'dot', className = '', style = {} }) {
+  const still = useReducedMotion();
+  const axis = vertical ? 'top' : 'left';
+  const pos = className.split(' ').includes('absolute') ? '' : 'relative';
   return (
-    <g transform={`translate(${x || 0} ${y || 0})`}>
-      <circle r={r} fill={stock ? '#FFFFFF' : PAPER} />
-      <image href={href} x={-r + pad} y={-r + pad} width={2 * (r - pad)} height={2 * (r - pad)} clipPath={`url(#${clip})`} preserveAspectRatio="xMidYMid slice" />
-      <circle r={r} fill="none" stroke={ring} strokeWidth="1" />
-      {children}
-    </g>
-  );
-}
-const Cap = ({ x, y, children, anchor = 'start', fill = MUT }) => (
-  <text x={x} y={y} textAnchor={anchor} fill={fill} fontSize="8.5" fontWeight="500" fontFamily={M} letterSpacing="1.1" style={{ textTransform: 'uppercase' }}>{children}</text>
-);
-function Track({ d, dur = '1.8s' }) {
-  return (
-    <g>
-      <path d={d} fill="none" stroke={LINE} strokeWidth="1" />
-      <path d={d} fill="none" stroke={GREEN} strokeWidth="1.5" strokeDasharray="2 9" strokeLinecap="round">
-        <animate attributeName="stroke-dashoffset" from="0" to="-44" dur={dur} repeatCount="indefinite" />
-      </path>
-    </g>
+    <span className={`${pos} block rounded-full ${vertical ? 'w-[5px]' : 'h-[5px]'} ${className}`} style={{ backgroundImage: vertical ? VBEAM : BEAM, boxShadow: GLOW, ...style }}>
+      {!still && [0, 1, 2].map((k) => (
+        <motion.span
+          key={k}
+          className={`absolute ${vertical ? 'left-1/2' : 'top-1/2'} -translate-x-1/2 -translate-y-1/2`}
+          initial={{ [axis]: '0%', opacity: 0 }}
+          animate={{ [axis]: '100%', opacity: [0, 1, 1, 0] }}
+          transition={{ duration: 2.1, delay: k * 0.7, repeat: Infinity, ease: 'linear' }}
+        >
+          {pellet === 'sol' ? <Sol className="h-3.5 w-3.5 shadow-[0_0_10px_rgba(95,227,255,0.7)]" /> : <span className="block h-2 w-2 rounded-full bg-white shadow-[0_0_10px_#fff]" />}
+        </motion.span>
+      ))}
+    </span>
   );
 }
 
-/** The whole route, or the stretch of one stop. */
-function RouteMap({ zone = null, className = '' }) {
-  const z = zone == null ? { x: 0, y: 0, w: 1056, h: H } : ZONES[zone];
-  const fees = [['NVDA', 0], ['TSLA', 0.33], ['ETH', 0.66]];
-  // One clip per drawing: the hidden copy of the map must not own the id the visible one points to.
-  const clip = `hw-round-${zone == null ? 'map' : zone}`;
+/** The coin: a pump.fun coin, drawn as a lit disc. */
+function Coin({ size = 'h-14 w-14' }) {
   return (
-    <svg viewBox={`${z.x} ${z.y} ${z.w} ${z.h}`} className={`mode-stage block w-full ${className}`} role="img" aria-label="Fees leave the coin for the dev wallet, pass through the routing and reach holders, wallets, a buyback, a treasury and a page">
-      <defs><clipPath id={clip} clipPathUnits="objectBoundingBox"><circle cx="0.5" cy="0.5" r="0.5" /></clipPath></defs>
-
-      {/* 01: the coin and the dev wallet */}
-      <Cap x={24} y={44}>Any ERC-20 on Robinhood Chain</Cap>
-      <Disc clip={clip} x={62} y={160} r={32} href="/logos/tokens/PONS.png" ring={DEEP} />
-      <text x="62" y="216" textAnchor="middle" fill={INK} fontSize="15" fontWeight="500" fontFamily={D}>PONS</text>
-      <Cap x={62} y={232} anchor="middle">Your coin</Cap>
-      <Cap x={122} y={146} anchor="middle" fill={MINT}>Fees</Cap>
-      <Track d="M 94 160 H 150" />
-      {fees.map(([t, at]) => (
-        <Disc clip={clip} key={t} r={8} href={t === 'ETH' ? '/eth.svg' : getStock(t)?.logo} stock>
-          <animateMotion dur="4.5s" begin={`-${at * 4.5}s`} repeatCount="indefinite" path="M 98 160 H 146" />
-        </Disc>
-      ))}
-      <rect x="150.5" y="84.5" width="112" height="152" rx="5" fill={PAPER} stroke={LINE} />
-      <Cap x={162} y={104}>Dev wallet</Cap>
-      <text x="162" y="121" fill={INK} fontSize="9" fontFamily={M}>0x8a2f…41c0</text>
-      <line x1="150" x2="262" y1="133.5" y2="133.5" stroke={LINE} />
-      {[['NVDA', '0.4210'], ['TSLA', '0.1875'], ['ETH', '0.0620']].map(([t, v], k) => (
-        <g key={t}>
-          <Disc clip={clip} x={171} y={156 + k * 28} r={9} href={t === 'ETH' ? '/eth.svg' : getStock(t)?.logo} stock />
-          <text x="186" y={159.5 + k * 28} fill={INK} fontSize="10" fontWeight="600" fontFamily={F}>{t}</text>
-          <text x="252" y={159.5 + k * 28} textAnchor="end" fill={MUT} fontSize="10" fontFamily={D} style={{ fontVariantNumeric: 'tabular-nums' }}>{v}</text>
-        </g>
-      ))}
-      <Cap x={150} y={256}>Gas reserve stays</Cap>
-      <Cap x={282} y={148} fill={MINT}>Sweep</Cap>
-
-      {/* 02: the routing */}
-      <Track d="M 262 160 H 320" />
-      <rect x="320.5" y="140.5" width="84" height="40" rx="5" fill={PAPER} stroke={DEEP} />
-      <Cap x={362} y={164} anchor="middle" fill={MINT}>Routing</Cap>
-      <Cap x={362} y={198} anchor="middle">Shares add</Cap>
-      <Cap x={362} y={211} anchor="middle">up to 100%</Cap>
-      {ROUTES.map((r, k) => (
-        <g key={r.name}>
-          <Track d={`M 404 160 C 500 160 480 ${r.y} 575 ${r.y} H 644`} dur={`${1.6 + k * 0.15}s`} />
-          <text x="634" y={r.y - 7} textAnchor="end" fill={r.page ? MINT : INK} fontSize="14" fontWeight="500" fontFamily={D} style={{ fontVariantNumeric: 'tabular-nums' }}>{r.share}</text>
-        </g>
-      ))}
-
-      {/* 03: the destinations */}
-      {ROUTES.map((r) => (
-        <g key={r.name}>
-          <rect x="644.5" y={r.y - 22.5} width="388" height="45" rx="5" fill={r.page ? 'rgba(47, 168, 255,0.05)' : PAPER} stroke={r.page ? DEEP : LINE} />
-          <Disc clip={clip} x={669} y={r.y} r={12} href={r.logo} stock={r.stock} />
-          <text x="690" y={r.y - 2} fill={INK} fontSize={r.page ? 11 : 12} fontWeight={r.page ? 400 : 600} fontFamily={r.page ? M : F}>{r.name}</text>
-          <text x="690" y={r.y + 12} fill={MUT} fontSize="8.5" fontFamily={M}>{r.sub}</text>
-          <Cap x={1020} y={r.y + 3} anchor="end" fill={r.page ? GOLD : MINT}>{r.state}</Cap>
-        </g>
-      ))}
-    </svg>
+    <span className={`relative flex ${size} shrink-0 items-center justify-center rounded-full border border-white/15 bg-[rgba(5,7,12,0.85)] shadow-[0_0_34px_rgba(47,168,255,0.3)]`}>
+      <span aria-hidden="true" className="absolute inset-[4px] rounded-full border border-cyan-500/30" />
+      <span className="font-mono text-[10px] font-medium tracking-[0.06em] text-ink">$COIN</span>
+    </span>
   );
 }
 
-function Stop({ step, className = '' }) {
+function DevWallet({ className = '' }) {
   return (
-    <div className={`px-5 py-5 sm:px-6 ${className}`}>
-      <div className="flex items-baseline gap-3">
-        <span className="figure text-[28px] font-medium leading-none text-hood-600">{step.n}</span>
-        <span className="label">{step.tag}</span>
+    <div className={`rounded-2xl border border-white/10 bg-[rgba(5,7,12,0.78)] px-4 py-3.5 backdrop-blur-md ${className}`}>
+      <div className="label">Dev wallet</div>
+      <div className="mt-1.5 flex items-center gap-2">
+        <Sol className="h-5 w-5" />
+        <span className="figure text-[26px] font-medium leading-none text-ink">4.82</span>
+        <span className="text-sm text-mut">SOL</span>
       </div>
-      <h3 className="mt-3 font-display text-xl font-medium tracking-tight text-ink">{step.title}</h3>
-      <p className="mt-1.5 text-sm leading-relaxed text-mut">{step.body}</p>
+      <div className="mt-1.5 text-[11px] text-mut">0.02 SOL stays for fees</div>
     </div>
   );
 }
 
-const COLS = 'lg:grid-cols-[276fr_368fr_412fr]';
+function Step({ step, i }) {
+  return (
+    <motion.div className="h-full" initial={{ opacity: 0, y: 14 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true, amount: 0.3 }} transition={{ delay: i * 0.08, duration: 0.6, ease: EASE }}>
+      <Glass lit="top" className="h-full p-6">
+        <div className="flex items-baseline justify-between gap-3">
+          <span className="figure text-beam text-[30px] font-medium leading-none">{step.n}</span>
+          <span className="label">{step.tag}</span>
+        </div>
+        <h3 className="mt-5 text-[19px] font-medium leading-snug tracking-[-0.02em] text-ink">{step.title}</h3>
+        <p className="mt-2 text-[14px] leading-relaxed text-mut">{step.body}</p>
+      </Glass>
+    </motion.div>
+  );
+}
 
 export default function HowItWorks() {
   return (
     <div id="how" className="scroll-mt-20">
-      <div className="mb-6 flex flex-wrap items-end justify-between gap-x-10 gap-y-2">
-        <div>
-          <div className="eyebrow mb-2">How it works</div>
-          <h2 className="font-display text-2xl font-medium tracking-tight text-ink sm:text-3xl lg:text-4xl">Follow a fee from the coin to the payout</h2>
+      <div className="flex flex-wrap items-end justify-between gap-x-10 gap-y-4">
+        <div className="max-w-xl">
+          <div className="eyebrow mb-4">How it works</div>
+          <h2 className="font-display text-[34px] font-medium leading-[1.04] tracking-[-0.03em] text-ink sm:text-[44px]">Follow a fee from the coin to the payout</h2>
         </div>
-        <p className="label pb-1.5">Three stops, every cycle</p>
+        <p className="max-w-xs pb-1 text-[15px] leading-relaxed text-mut">Three stops on Solana, every cycle, each one on chain with a receipt.</p>
       </div>
 
-      {/* wide: the map in one piece, the stops written under their stretch of it */}
-      <div className="frame hidden lg:block">
-        <div className="rounded-t-2xl bg-ground/60"><RouteMap /></div>
-        <div className={`grid border-t border-line ${COLS}`} aria-hidden>
-          {STEPS.map((s, i) => (
-            <div key={s.n} className={`relative h-2 ${i ? 'border-l border-line' : ''}`}><span className="absolute left-0 top-0 h-px w-10 -translate-y-px bg-hood-500" /></div>
-          ))}
-        </div>
-        <div className={`grid ${COLS}`}>
-          {STEPS.map((s, i) => <Stop key={s.n} step={s} className={i ? 'border-l border-line' : ''} />)}
-        </div>
-      </div>
-
-      {/* narrow: the map cut at each stop */}
-      <div className="frame divide-y divide-line lg:hidden">
-        {STEPS.map((s, i) => (
-          <div key={s.n}>
-            <div className={`border-b border-line bg-ground/60 ${i ? '' : 'rounded-t-2xl'}`}><RouteMap zone={i} className="mx-auto max-w-md" /></div>
-            <Stop step={s} />
+      {/* the route, on the ground: coin, dev wallet, the split, the destinations */}
+      <div className="relative mt-14">
+        <div aria-hidden="true" className="pointer-events-none absolute inset-x-[8%] top-1/2 h-48 -translate-y-1/2 rounded-full bg-hood-500/10 blur-3xl" />
+        <div className={`relative grid grid-cols-[64px_minmax(0,1fr)] ${COLS}`}>
+          {/* wide: the coin and the dev wallet on one line of light that runs into the split */}
+          <div className="hidden h-full items-center lg:flex">
+            <div className="relative">
+              <Coin />
+              <div className="absolute left-1/2 top-full mt-3 -translate-x-1/2 whitespace-nowrap text-center">
+                <div className="text-[13px] font-medium text-ink">Your coin</div>
+                <div className="label mt-0.5">on pump.fun</div>
+              </div>
+            </div>
+            <div className="relative mx-3 min-w-[48px] flex-1">
+              <span className="label absolute bottom-full left-1/2 mb-3 -translate-x-1/2 !text-cyan-500">fees</span>
+              <Beam pellet="sol" />
+            </div>
+            <DevWallet className="w-[178px] shrink-0" />
+            <Beam className="min-w-[20px] flex-[0.6]" />
           </div>
-        ))}
+
+          {/* narrow: the same, down a trunk */}
+          <div className="relative col-span-2 pb-7 lg:hidden">
+            <Beam vertical className="absolute bottom-0 top-12" style={{ left: TRUNK - 2.5 }} />
+            <div className="flex items-center gap-3">
+              <Coin size="h-12 w-12" />
+              <div>
+                <div className="text-[13px] font-medium text-ink">Your coin</div>
+                <div className="label mt-0.5">on pump.fun · a fee on every trade</div>
+              </div>
+            </div>
+            <div className="relative mt-6" style={{ marginLeft: 64 }}>
+              <span aria-hidden="true" className="absolute top-1/2 h-[5px] -translate-y-1/2 rounded-full" style={{ left: TRUNK - 64, width: 64 - TRUNK, backgroundImage: BEAM, boxShadow: GLOW }} />
+              <DevWallet />
+            </div>
+          </div>
+
+          {/* the split */}
+          <Fan ends={ENDS} height={H} from="left" className="hidden lg:block" />
+          <Fan ends={ENDS} height={H} from="top" x={TRUNK} className="lg:hidden" />
+
+          {/* the destinations, each at the end of its channel */}
+          <ul className="flex flex-col" style={{ gap: GAP }}>
+            {DESTS.map((d, i) => (
+              <motion.li key={d.key} className="flex items-center" style={{ height: ROW }} initial={{ opacity: 0, x: 14 }} whileInView={{ opacity: 1, x: 0 }} viewport={{ once: true }} transition={{ delay: 0.2 + i * 0.08, duration: 0.6, ease: EASE }}>
+                <div className="w-full"><FlowChip icon={d.icon} label={d.label} sub={d.sub} share={d.share} /></div>
+              </motion.li>
+            ))}
+          </ul>
+        </div>
+      </div>
+
+      <div className={`mt-12 grid gap-4 ${COLS}`}>
+        {STEPS.map((s, i) => <Step key={s.n} step={s} i={i} />)}
+      </div>
+
+      <div className="mt-6 flex flex-wrap items-baseline justify-between gap-x-8 gap-y-2">
+        <p className="label !normal-case !tracking-normal">A cycle every 1, 2, 5, 10, 30 or 60 minutes, or once a day at the closing bell.</p>
+        <p className="text-[13px] text-mut">Also on Robinhood Chain, the second chain: fees in ETH and Robinhood Stock Tokens, swaps on Uniswap.</p>
       </div>
     </div>
   );
