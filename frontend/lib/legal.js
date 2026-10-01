@@ -3,13 +3,13 @@
 // stored), this file changes with it, and UPDATED too.
 import { BRAND, SITE_HOST, CONTACT_EMAIL } from './brand';
 
-export const UPDATED = 'September 29, 2026';
+export const UPDATED = 'October 1, 2026';
 
 export const PRIVACY = [
   {
     title: 'The short version',
     body: [
-      `${BRAND} routes the fees of a coin on Robinhood Chain to destinations chosen by its creator, including pages on other platforms. To pay the owner of a page we need to know one thing: that the person claiming it controls it. We read the minimum that answers that question, and nothing else.`,
+      `${BRAND} routes the fees of a coin on Solana or Robinhood Chain to destinations chosen by its creator, including pages on other platforms. To pay the owner of a page we need to know one thing: that the person claiming it controls it. We read the minimum that answers that question, and nothing else.`,
       [
         'We never post, follow, message or change anything on your accounts. Every access we ask for is read only.',
         'We do not keep the access a platform gives us. It is used once, for a few seconds, then discarded.',
@@ -47,7 +47,7 @@ export const PRIVACY = [
         'The address of the wallet you chose, and the time of the claim.',
         'How the page was proved: a platform sign-in, or a DNS record.',
       ],
-      'A claimed page and the wallet it pays are shown on the public profile of the page. Payments to it are transactions on Robinhood Chain and are public.',
+      'A claimed page and the wallet it pays are shown on the public profile of the page. Payments to it are transactions on Solana or Robinhood Chain and are public.',
     ],
   },
   {
@@ -79,7 +79,7 @@ export const PRIVACY = [
       ] },
       'These cookies are needed for the site to work, cannot be read by scripts, and are not used to follow you elsewhere. There are no advertising or analytics cookies.',
       'Like any web server, ours records requests: address, time, page and browser. These logs serve to keep the service running and to stop abuse.',
-      'Some pictures load from other services: token logos can come from DexScreener, which then sees the request of your browser.',
+      'Some pictures load from other services: token logos can come from DexScreener, Jupiter or Backed Finance (for xStocks), which then see the request of your browser.',
     ],
   },
   {
@@ -120,7 +120,7 @@ export const TERMS = [
   {
     title: 'What the service is',
     body: [
-      `${BRAND} is software that routes the fees of a coin on Robinhood Chain to the destinations its creator sets: holders, wallets, buybacks, a treasury, and pages on other platforms. Using ${SITE_HOST} or the Telegram bot means accepting these terms.`,
+      `${BRAND} is software that routes the fees of a coin on Solana (coins launched on pump.fun) or on Robinhood Chain to the destinations its creator sets: holders, wallets, buybacks, a treasury, and pages on other platforms. Using ${SITE_HOST} or the Telegram bot means accepting these terms.`,
       `${BRAND} is not a bank, a broker, an exchange or an adviser. Nothing on the site is financial, legal or tax advice.`,
     ],
   },
@@ -156,10 +156,10 @@ export const TERMS = [
   {
     title: 'Other platforms',
     body: [
-      `${BRAND} is not affiliated with, sponsored by or endorsed by YouTube, Google, GitHub, X, Meta, Instagram, Facebook, TikTok, Twitch or Robinhood. Their names say where a page lives or who issues an asset.`,
+      `${BRAND} is not affiliated with, sponsored by or endorsed by YouTube, Google, GitHub, X, Meta, Instagram, Facebook, TikTok, Twitch, pump.fun, Jupiter, Backed Finance or Robinhood. Their names say where a page lives, where a coin trades or who issues an asset.`,
       'Connecting a page is subject to the terms of its platform. Connecting a YouTube channel means agreeing to the YouTube Terms of Service.',
       { link: 'https://www.youtube.com/t/terms', label: 'YouTube Terms of Service' },
-      'Stock Tokens are issued by Robinhood under its own terms. The service only buys and transfers them on chain.',
+      'xStocks are issued by Backed Finance, and Stock Tokens by Robinhood, each under its own terms. The service only buys and transfers them on chain.',
     ],
   },
   {
