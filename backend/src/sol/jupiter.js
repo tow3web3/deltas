@@ -2,7 +2,7 @@
 // fair-price guard. The free endpoints (lite-api) need no key; JUPITER_API_KEY
 // switches to the paid host when set.
 import { VersionedTransaction } from '@solana/web3.js';
-import { conn } from './client.js';
+import { conn, rpc } from './client.js';
 
 export const SOL_MINT = 'So11111111111111111111111111111111111111112';
 const BASE = process.env.JUPITER_API_KEY ? 'https://api.jup.ag' : 'https://lite-api.jup.ag';
@@ -54,8 +54,13 @@ export async function tokenInfo(mint) {
   try {
     const d = await getJson(`${BASE}/tokens/v2/search?query=${mint}`);
     const t = (Array.isArray(d) ? d : []).find((x) => x.id === mint);
-    return t ? { address: t.id, symbol: t.symbol, name: t.name, decimals: t.decimals, icon: t.icon || null, tags: t.tags || [] } : null;
-  } catch {
-    return null;
-  }
+    if (t) return { address: t.id, symbol: t.symbol, name: t.name, decimals: t.decimals, icon: t.icon || null, tags: t.tags || [] };
+  } catch { /* fall through to the chain */ }
+  // A coin launched minutes ago can be missing from Jupiter: its on-chain metadata (Helius DAS) says enough.
+  try {
+    const a = await rpc('getAsset', { id: mint });
+    const md = a?.content?.metadata;
+    if (md?.symbol && a?.token_info?.decimals != null) return { address: mint, symbol: md.symbol, name: md.name || md.symbol, decimals: a.token_info.decimals, icon: a.content?.links?.image || null, tags: [] };
+  } catch { /* not a DAS-capable RPC, or no such mint */ }
+  return null;
 }

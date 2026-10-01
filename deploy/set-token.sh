@@ -1,16 +1,18 @@
 #!/usr/bin/env bash
 # Put the project token live on the site and in the bot, in one go.
 # Usage (from the repo root, Git Bash):
-#   bash deploy/set-token.sh <mint or 0x address> [min hold to set up a coin]
-#   bash deploy/set-token.sh <the $DELTAS mint> 0
+#   bash deploy/set-token.sh <mint or 0x address> [min hold to set up a coin] [symbol]
+#   bash deploy/set-token.sh <the $DELTAS mint> 0 DELTAS
 # What it does:
-#   1. checks the token: Jupiter for a Solana mint (a pump.fun coin), eth_call for a 0x token;
+#   1. checks the token: Jupiter for a Solana mint (a pump.fun coin), eth_call for a 0x token.
+#      Right after a launch Jupiter can lag a few minutes: a mint that exists on Solana is then
+#      taken with the symbol given as the third argument;
 #   2. writes it into the bot's env on the VM and restarts the bot once no cycle is running;
 #   3. sets it on Vercel and redeploys the site (NEXT_PUBLIC_* values are baked in at build time).
 # The minimum hold is the holders-only gate, in the bot and on the dashboard: 0 means anyone
 # can set up a coin; N means the creator wallet must hold N tokens first.
 set -euo pipefail
-CA="${1:-}"; MIN_HOLD="${2:-0}"
+CA="${1:-}"; MIN_HOLD="${2:-0}"; GIVEN_SYMBOL="${3:-}"
 VM="root@65.20.103.177"; KEY="$HOME/.ssh/delta-cr"
 DIR="${DELTA_DIR:-/root/routepay}"; SERVICE="${DELTA_BOT_SERVICE:-routepay-bot}"
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -32,6 +34,13 @@ mint = sys.argv[1]
 d = json.load(sys.stdin)
 t = next((x for x in (d if isinstance(d, list) else []) if x.get('id') == mint), None)
 print((t['symbol'] + ' ' + t['name']) if t else '')" "$CA")
+  if [ -z "${SYMBOL:-}" ]; then
+    # Not on Jupiter yet: is the mint on chain at all?
+    EXISTS="$(curl -s https://api.mainnet-beta.solana.com -H 'Content-Type: application/json' -d "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"getAccountInfo\",\"params\":[\"$CA\",{\"encoding\":\"base64\"}]}" | python -c "import sys,json; print('yes' if (json.load(sys.stdin).get('result') or {}).get('value') else '')")"
+    if [ -n "$EXISTS" ] && [ -n "$GIVEN_SYMBOL" ]; then SYMBOL="$GIVEN_SYMBOL"; NAME="$GIVEN_SYMBOL (not on Jupiter yet)";
+    elif [ -n "$EXISTS" ]; then echo "The mint exists but Jupiter does not list it yet: wait a minute, or pass the symbol as the third argument."; exit 1;
+    else echo "No mint at $CA on Solana yet: launch the coin first."; exit 1; fi
+  fi
 else
   echo "Give the token's address: a Solana mint (base58) or a 0x address"; exit 1
 fi

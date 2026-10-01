@@ -132,7 +132,15 @@ function TokenCard({ data }) {
           <p className="mt-2 text-xs text-mut">Check the address here before you buy: this page is the only source.</p>
         </div>
         <div className="flex flex-wrap gap-2 lg:flex-col">
-          <a href={dexScreenerFor(chain, TOKEN_CA)} target="_blank" rel="noopener noreferrer" className="btn-primary whitespace-nowrap">Chart and buy<External className="h-3.5 w-3.5" /></a>
+          {/* A pump.fun coin is bought on pump.fun first; the chart follows on DexScreener. */}
+          {chain === 'solana' && TOKEN_CA.endsWith('pump') ? (
+            <>
+              <a href={`https://pump.fun/coin/${TOKEN_CA}`} target="_blank" rel="noopener noreferrer" className="btn-primary whitespace-nowrap">Buy on pump.fun<External className="h-3.5 w-3.5" /></a>
+              <a href={dexScreenerFor(chain, TOKEN_CA)} target="_blank" rel="noopener noreferrer" className="btn-ghost whitespace-nowrap">Chart<External className="h-3.5 w-3.5" /></a>
+            </>
+          ) : (
+            <a href={dexScreenerFor(chain, TOKEN_CA)} target="_blank" rel="noopener noreferrer" className="btn-primary whitespace-nowrap">Chart and buy<External className="h-3.5 w-3.5" /></a>
+          )}
           <a href={explorerTokenFor(chain, TOKEN_CA)} target="_blank" rel="noopener noreferrer" className="btn-ghost whitespace-nowrap">{chain === 'solana' ? 'Mint' : 'Contract'}<External className="h-3.5 w-3.5" /></a>
         </div>
       </div>

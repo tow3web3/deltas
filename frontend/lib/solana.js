@@ -80,6 +80,13 @@ export async function jupiterTokens(mints) {
       if (t) {
         const v = { symbol: t.symbol, name: t.name, decimals: t.decimals, image: t.icon || null, marketCap: t.mcap ?? t.fdv ?? null, isXStock: /xStock/i.test(t.name || '') && mint.startsWith('Xs') };
         cache.set(`t:${mint}`, { at: Date.now(), v }); out[mint] = v;
+      } else {
+        // A coin launched minutes ago can be missing from Jupiter: read its on-chain metadata (Helius DAS).
+        const a = await rpc('getAsset', { id: mint }).catch(() => null);
+        const md = a?.content?.metadata;
+        if (md?.symbol && a?.token_info?.decimals != null) {
+          out[mint] = { symbol: md.symbol, name: md.name || md.symbol, decimals: a.token_info.decimals, image: a.content?.links?.image || null, marketCap: null, isXStock: false };
+        }
       }
     } catch { /* unknown mint: the monogram will do */ }
   }
