@@ -22,9 +22,10 @@ const EASE = [0.16, 1, 0.3, 1];
 function Glass({ children, className = '', lit = 'left', style = {} }) {
   const edge = lit === 'left' ? { borderLeftColor: 'rgba(95,227,255,0.55)' } : lit === 'top' ? { borderTopColor: 'rgba(95,227,255,0.55)' } : {};
   return (
-    <div className={`relative overflow-hidden rounded-[22px] border ${className}`} style={{ background: G.glass, borderColor: G.edge, backdropFilter: 'blur(18px)', ...edge, ...style }}>
+    <div className="relative overflow-hidden rounded-[22px] border" style={{ background: G.glass, borderColor: G.edge, backdropFilter: 'blur(18px)', ...edge, ...style }}>
       <div aria-hidden="true" className="pointer-events-none absolute inset-0" style={{ background: 'linear-gradient(135deg, rgba(255,255,255,0.05), transparent 45%)' }} />
-      <div className="relative">{children}</div>
+      {/* the layout classes belong to the content, not the glass */}
+      <div className={`relative ${className}`}>{children}</div>
     </div>
   );
 }
@@ -224,7 +225,7 @@ function Destinations() {
       </div>
       <div className="grid gap-2 sm:grid-cols-2">
         {items.map((it, i) => (
-          <motion.div key={it.k} initial={{ opacity: 0, y: 10 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ delay: i * 0.06, duration: 0.5, ease: EASE }}>
+          <motion.div key={it.k} initial={{ opacity: 0, y: 10 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true, amount: 0, margin: '0px 0px 400px 0px' }} transition={{ delay: i * 0.06, duration: 0.5, ease: EASE }}>
             <Glass className="flex items-center gap-4 px-4 py-4" lit="none">
               <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl" style={{ background: 'rgba(255,255,255,0.05)' }}><PlatformIcon platform={it.k} className="h-5 w-5" /></span>
               <span className="min-w-0"><span className="block text-[15px] font-medium" style={{ color: G.ink }}>{it.name}</span><span className="block text-[12.5px]" style={{ color: G.mut }}>{it.how}</span></span>
