@@ -1,7 +1,7 @@
 import { getDashboard, scheduleLabel } from '../../../../../lib/queries';
 import { fetchTokenMeta } from '../../../../../lib/tokenMeta';
 import { apiJson, apiOptions } from '../../../../../lib/apiResponse';
-import { EVM_ADDR } from '../../../../../lib/stocks';
+import { isAnyAddress } from '../../../../../lib/chains';
 import { tokenYield } from '../../../../../lib/yield';
 
 export const runtime = 'nodejs';
@@ -16,7 +16,7 @@ export function OPTIONS() {
 export async function GET(request, { params }) {
   try {
     const { address } = await params;
-    if (!EVM_ADDR.test(address)) return apiJson({ error: 'Invalid address' }, 400);
+    if (!isAnyAddress(address)) return apiJson({ error: 'Invalid address' }, 400);
     const data = await getDashboard(address);
     if (!data) return apiJson({ linked: false, address });
 

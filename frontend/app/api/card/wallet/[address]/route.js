@@ -2,7 +2,7 @@ import { ImageResponse } from 'next/og';
 import { getWalletStatement } from '../../../../../lib/queries';
 import { fetchTokenMeta } from '../../../../../lib/tokenMeta';
 import { CARD, COLORS, loadFonts, logoCandidates, inlineLogo, fmtUnits, siteUrl, Monogram, Wordmark } from '../../../../../lib/og';
-import { EVM_ADDR } from '../../../../../lib/stocks';
+import { isAnyAddress } from '../../../../../lib/chains';
 import { BRAND } from '../../../../../lib/brand';
 
 export const runtime = 'nodejs';
@@ -10,7 +10,7 @@ export const dynamic = 'force-dynamic';
 
 export async function GET(request, { params }) {
   const { address } = await params;
-  if (!EVM_ADDR.test(address)) return new Response('Bad address', { status: 400 });
+  if (!isAnyAddress(address)) return new Response('Bad address', { status: 400 });
   const site = siteUrl();
   const { totals } = await getWalletStatement(address);
   const meta = await fetchTokenMeta(totals.flatMap((t) => [t.source_token, t.reward_token]));

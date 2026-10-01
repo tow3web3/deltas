@@ -12,6 +12,8 @@ import { fetchTokenMeta } from '../../../lib/tokenMeta';
 import { getStock, explorerTx, explorerToken } from '../../../lib/stocks';
 import { fmtUnits, siteUrl } from '../../../lib/og';
 import { BRAND, CREDIT } from '../../../lib/brand';
+import { CHAINS } from '../../../lib/chains';
+import { getXStock } from '../../../lib/xstocks';
 
 export const dynamic = 'force-dynamic';
 const X_HANDLE = CREDIT;
@@ -25,8 +27,13 @@ async function load(id) {
   const meta = await fetchTokenMeta([r.source_token_address, r.reward_token_used]);
   const src = meta[r.source_token_address] || {};
   const rew = meta[r.reward_token_used] || {};
-  const stock = getStock(r.reward_token_used);
-  return { r, src, rew, stock, rewardSymbol: rew.symbol || stock?.ticker || 'ETH', amount: fmtUnits(r.total_airdropped, rew.decimals ?? 18) };
+  // The chain decides the native coin, its decimals and the name of the stock tokens.
+  const chain = CHAINS[r.chain] || CHAINS.robinhood;
+  const xs = r.chain === 'solana' ? getXStock(r.reward_token_used) : null;
+  const stock = xs ? { ticker: xs.symbol, name: xs.name, logo: xs.logo, xstock: true } : getStock(r.reward_token_used);
+  const nativeReward = !r.reward_token_used || /^0x0{40}$/i.test(r.reward_token_used) || r.reward_token_used === 'So11111111111111111111111111111111111111112';
+  const rewDecimals = nativeReward ? chain.nativeDecimals : rew.decimals ?? (xs ? xs.decimals : 18);
+  return { r, src, rew, stock, chain, rewardSymbol: nativeReward ? chain.native : rew.symbol || stock?.ticker || chain.native, amount: fmtUnits(r.total_airdropped, rewDecimals) };
 }
 
 export async function generateMetadata({ params }) {
@@ -34,7 +41,7 @@ export async function generateMetadata({ params }) {
   const d = await load(id);
   if (!d) return { title: `Receipt not found · ${BRAND}` };
   const title = `$${d.src.symbol || 'Token'} paid ${d.amount} ${d.rewardSymbol} to its holders`;
-  const description = `${d.r.paid_count || d.r.holder_count} wallets received ${d.rewardSymbol} as a dividend on Robinhood Chain, via ${BRAND}.`;
+  const description = `${d.r.paid_count || d.r.holder_count} wallets received ${d.rewardSymbol} as a dividend on ${d.chain.label}, via ${BRAND}.`;
   const image = `${siteUrl()}/api/card/receipt/${d.r.id}`;
   return {
     title: `${title} · ${BRAND}`,
@@ -96,9 +103,12 @@ export default async function ReceiptPage({ params }) {
     );
   }
 
-  const { r, src, rew, stock, rewardSymbol, amount } = d;
+  const { r, src, rew, stock, rewardSymbol, amount, chain } = d;
+  const onSol = chain.key === 'solana';
+  // The native coin of the chain, with its own logo.
+  const native = onSol ? { address: 'So11111111111111111111111111111111111111112', meta: { symbol: 'SOL', image: '/sol.png' } } : { address: null, meta: undefined };
   const site = siteUrl();
-  const shareText = `$${src.symbol || 'Token'} just paid its holders ${amount} ${rewardSymbol}\n${r.paid_count || r.holder_count} wallets, pro-rata, on Robinhood Chain.\nDividends by ${X_HANDLE}`;
+  const shareText = `$${src.symbol || 'Token'} just paid its holders ${amount} ${rewardSymbol}\n${r.paid_count || r.holder_count} wallets, pro-rata, on ${chain.label}.\nDividends by ${X_HANDLE}`;
   const shareUrl = `https://x.com/intent/tweet?text=${encodeURIComponent(shareText)}&url=${encodeURIComponent(`${site}/receipt/${r.id}`)}`;
   const when = new Date(r.execution_time).toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'America/New_York' });
   const coin = src.name || (src.symbol ? `$${src.symbol}` : short(r.source_token_address));
@@ -120,7 +130,7 @@ export default async function ReceiptPage({ params }) {
               <span className="whitespace-nowrap"><span className="figure text-hood-500">{amount}</span> {rewardSymbol}</span>.
             </h1>
             <p className="mt-4 max-w-md text-sm leading-relaxed text-mut">
-              {paid} wallets were paid on {when} ET, from {fmtUnits(r.claimed_eth_wei, 18, 4)} ETH of fees. Every line of it is on the slip.
+              {paid} wallets were paid on {when} ET, from {fmtUnits(r.claimed_eth_wei, chain.nativeDecimals, 4)} {chain.native} of fees. Every line of it is on the slip.
             </p>
             <div className="mt-7 flex flex-wrap gap-2">
               <a href={shareUrl} target="_blank" rel="noopener noreferrer" className="btn-ink"><X className="h-3.5 w-3.5" /> Share</a>
@@ -157,7 +167,7 @@ export default async function ReceiptPage({ params }) {
             <section className="px-6 py-3">
               <div className="label flex justify-between pb-1"><span>Item</span><span>Amount</span></div>
               <Item label="Fees collected" note="what this cycle started from">
-                <Asset address={null}>{fmtUnits(r.claimed_eth_wei, 18, 4)} ETH</Asset>
+                <Asset address={native.address} meta={native.meta}>{fmtUnits(r.claimed_eth_wei, chain.nativeDecimals, 4)} {chain.native}</Asset>
               </Item>
               {r.swap_tx && (
                 <Item label="Swapped into" note="on the market, before the payout">
@@ -178,7 +188,7 @@ export default async function ReceiptPage({ params }) {
                     <StockLogo address={r.reward_token_used} meta={rew} size="h-8 w-8" text="text-[8px]" />
                     <div className="min-w-0">
                       <div className="text-sm font-semibold leading-tight text-ink">{rewardSymbol}</div>
-                      <div className="truncate text-[11px] leading-tight text-mut">{stock ? `${stock.name} · Robinhood Stock Token` : rew.name || 'on Robinhood Chain'}</div>
+                      <div className="truncate text-[11px] leading-tight text-mut">{stock ? `${stock.name} · ${stock.xstock ? 'xStock on Solana' : 'Robinhood Stock Token'}` : rew.name || `on ${chain.label}`}</div>
                     </div>
                   </div>
                 </div>
@@ -203,7 +213,7 @@ export default async function ReceiptPage({ params }) {
                 )}
                 <div className="flex items-center justify-between gap-3">
                   <dt className="text-mut">chain</dt>
-                  <dd className="text-ink">Robinhood Chain (4663)</dd>
+                  <dd className="text-ink">{onSol ? 'Solana' : 'Robinhood Chain (4663)'}</dd>
                 </div>
               </dl>
               {r.error_message && <p className="mt-4 border-t border-dashed border-line pt-3 text-xs text-gold-400">{r.error_message}</p>}

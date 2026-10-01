@@ -121,6 +121,7 @@ export async function getReceipt(id) {
   const [row] = await sql`
     SELECT el.id, el.claimed_eth_wei::text AS claimed_eth_wei, el.total_airdropped::text AS total_airdropped, el.holder_count,
            el.execution_time, el.reward_token_used, el.reward_mode_used, el.destination, el.swap_tx, el.error_message,
+           COALESCE(el.chain, bc.chain, 'robinhood') AS chain, COALESCE(el.burn_amount, 0)::text AS burn_amount, el.burn_tx,
            bc.source_token_address, bc.schedule_kind, bc.interval_minutes, bc.loyalty_enabled,
            (SELECT COUNT(*)::int FROM airdrop_transactions at WHERE at.execution_log_id = el.id AND at.status = 'success') AS paid_count,
            (SELECT at.tx_hash FROM airdrop_transactions at WHERE at.execution_log_id = el.id AND at.status = 'success' AND at.tx_hash IS NOT NULL LIMIT 1) AS tx_hash

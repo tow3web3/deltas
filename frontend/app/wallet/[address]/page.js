@@ -9,7 +9,8 @@ import StockLogo from '../../../components/StockLogo';
 import { Arrow, X, External, Medal } from '../../../components/Icons';
 import { getWalletStatement } from '../../../lib/queries';
 import { fetchTokenMeta } from '../../../lib/tokenMeta';
-import { EVM_ADDR, explorerTx, explorerAddress } from '../../../lib/stocks';
+import { explorerTx, explorerAddress } from '../../../lib/stocks';
+import { isAnyAddress, chainOf, CHAINS } from '../../../lib/chains';
 import { fmtUnits, siteUrl } from '../../../lib/og';
 import { BRAND, CREDIT } from '../../../lib/brand';
 
@@ -20,12 +21,12 @@ const X_HANDLE = CREDIT;
 
 export async function generateMetadata({ params }) {
   const { address } = await params;
-  if (!EVM_ADDR.test(address)) return { title: `Wallet · ${BRAND}` };
+  if (!isAnyAddress(address)) return { title: `Wallet · ${BRAND}` };
   const image = `${siteUrl()}/api/card/wallet/${address}`;
   const title = `Dividend statement for ${short(address)}`;
   return {
     title: `${title} · ${BRAND}`,
-    description: `Stock dividends earned by holding tokens on Robinhood Chain, via ${BRAND}.`,
+    description: `Dividends earned by holding coins routed by ${BRAND}, on ${CHAINS[chainOf(address)]?.label || 'Solana'}.`,
     openGraph: { title, images: [{ url: image, width: 1200, height: 630 }] },
     twitter: { card: 'summary_large_image', title, images: [image] },
   };
@@ -33,7 +34,7 @@ export async function generateMetadata({ params }) {
 
 export default async function WalletPage({ params }) {
   const { address } = await params;
-  if (!EVM_ADDR.test(address)) {
+  if (!isAnyAddress(address)) {
     return (
       <>
         <TickerTape /><Navigation />
@@ -65,8 +66,8 @@ export default async function WalletPage({ params }) {
   const site = siteUrl();
   const headline = [...byReward.entries()].sort((a, b) => b[1].n - a[1].n).slice(0, 3).map(([k, v]) => `${fmtUnits(v.total, dec(k))} ${sym(k)}`).join(', ');
   const shareText = dividends > 0
-    ? `I earned ${headline} just by holding on Robinhood Chain. Stock dividends by ${X_HANDLE}`
-    : `Memecoins that pay real stock dividends on Robinhood Chain. ${X_HANDLE}`;
+    ? `I earned ${headline} just by holding, on ${CHAINS[chainOf(address)]?.label || 'Solana'}. Dividends by ${X_HANDLE}`
+    : `Coins that pay their holders every cycle, in SOL and real stocks. ${X_HANDLE}`;
   const shareUrl = `https://x.com/intent/tweet?text=${encodeURIComponent(shareText)}&url=${encodeURIComponent(`${site}/wallet/${address}`)}`;
   const assets = [...byReward.entries()].sort((a, b) => b[1].n - a[1].n);
   const coins = new Set(totals.map((t) => t.source_token)).size;
@@ -119,7 +120,7 @@ export default async function WalletPage({ params }) {
                         <StockLogo address={k} meta={meta[k]} size="h-8 w-8" text="text-[8px]" />
                         <div className="min-w-0">
                           <div className="text-sm font-semibold text-ink">{sym(k)}</div>
-                          <div className="truncate text-[11px] text-mut">{meta[k]?.name || 'on Robinhood Chain'}<span className="sm:hidden"> · {v.n} payouts</span></div>
+                          <div className="truncate text-[11px] text-mut">{meta[k]?.name || `on ${CHAINS[chainOf(address)]?.label || 'Solana'}`}<span className="sm:hidden"> · {v.n} payouts</span></div>
                         </div>
                       </div>
                       <div className="hidden items-center gap-2 sm:flex">

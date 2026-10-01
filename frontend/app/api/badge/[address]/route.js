@@ -5,7 +5,7 @@ import path from 'path';
 import { getDashboard } from '../../../../lib/queries';
 import { fetchTokenMeta } from '../../../../lib/tokenMeta';
 import { tokenYield, fmtApy } from '../../../../lib/yield';
-import { EVM_ADDR } from '../../../../lib/stocks';
+import { isAnyAddress } from '../../../../lib/chains';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -39,13 +39,13 @@ function badge(left, right, color) {
 export async function GET(request, { params }) {
   const { address } = await params;
   const headers = { 'Content-Type': 'image/svg+xml; charset=utf-8', 'Cache-Control': 'public, max-age=300' };
-  if (!EVM_ADDR.test(address)) return new Response(badge('delta', 'invalid address', '#FF5000'), { status: 400, headers });
+  if (!isAnyAddress(address)) return new Response(badge('delta', 'invalid address', '#FF5000'), { status: 400, headers });
   const style = new URL(request.url).searchParams.get('style') || 'yield';
   try {
     const data = await getDashboard(address);
     if (!data) return new Response(badge('delta', 'not linked', '#8A9099'), { headers });
     const meta = await fetchTokenMeta([address, data.config.target_token_address]);
-    const y = await tokenYield(address, meta[address.toLowerCase()]?.marketCap ?? null);
+    const y = await tokenYield(address, meta[/^0x/.test(address) ? address.toLowerCase() : address]?.marketCap ?? null);
     if (style === 'reward') {
       const sym = meta[data.config.target_token_address]?.symbol || 'stocks';
       return new Response(badge('dividends in', sym, '#2FA8FF'), { headers });

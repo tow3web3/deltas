@@ -1,6 +1,6 @@
 import { getWalletStatement } from '../../../../lib/queries';
 import { fetchTokenMeta } from '../../../../lib/tokenMeta';
-import { EVM_ADDR } from '../../../../lib/stocks';
+import { isAnyAddress, normAddress } from '../../../../lib/chains';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -10,7 +10,7 @@ const BLOCKS_PER_DAY = 864000;
 export async function GET(request, { params }) {
   try {
     const { address } = await params;
-    if (!EVM_ADDR.test(address)) return Response.json({ error: 'Invalid address' }, { status: 400 });
+    if (!isAnyAddress(address)) return Response.json({ error: 'Invalid address' }, { status: 400 });
     const { totals, recent, holdings } = await getWalletStatement(address);
     const meta = await fetchTokenMeta([
       ...totals.flatMap((t) => [t.source_token, t.reward_token]),
@@ -20,7 +20,7 @@ export async function GET(request, { params }) {
     const view = (a) => ({ address: a, symbol: meta[a]?.symbol || null, name: meta[a]?.name || null, image: meta[a]?.image || null, decimals: meta[a]?.decimals ?? 18 });
 
     return Response.json({
-      wallet: address.toLowerCase(),
+      wallet: normAddress(address),
       totals: totals.map((t) => ({ source: view(t.source_token), reward: view(t.reward_token), total: t.total, count: t.n, lastAt: t.last_at })),
       recent: recent.map((r) => ({ logId: r.log_id, amount: r.amount, txHash: r.tx_hash, time: r.execution_time, reward: view(r.reward_token), source: view(r.source_token) })),
       holdings: holdings.map((h) => {

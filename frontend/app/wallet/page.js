@@ -10,7 +10,8 @@ import Footer from '../../components/Footer';
 import StockLogo from '../../components/StockLogo';
 import { Arrow, Medal } from '../../components/Icons';
 import { useWallet } from '../../lib/useWallet';
-import { EVM_ADDR, getStock } from '../../lib/stocks';
+import { getStock } from '../../lib/stocks';
+import { isAnyAddress } from '../../lib/chains';
 import { BRAND } from '../../lib/brand';
 
 // The assets a statement line can be paid in: ETH, then stocks.
@@ -23,7 +24,7 @@ export default function WalletLookup() {
   const [err, setErr] = useState(null);
 
   const go = (a) => {
-    if (!EVM_ADDR.test(a)) return setErr('Paste a 0x wallet address (42 characters).');
+    if (!isAnyAddress(a)) return setErr('Paste a Solana wallet address, or a 0x address on Robinhood Chain.');
     router.push(`/wallet/${a}`);
   };
 
@@ -41,7 +42,7 @@ export default function WalletLookup() {
             <form onSubmit={(e) => { e.preventDefault(); go(q.trim()); }} className="mt-8 max-w-xl">
               <label htmlFor="wallet-address" className="label">Wallet address</label>
               <div className="mt-2 flex flex-col gap-2 sm:flex-row">
-                <input id="wallet-address" value={q} onChange={(e) => { setQ(e.target.value); if (err) setErr(null); }} placeholder="0x… wallet address" spellCheck={false} autoComplete="off" className={`min-w-0 flex-1 rounded-xl border bg-paper px-4 py-3 font-mono text-sm text-ink outline-none transition placeholder:text-mut/60 focus:ring-2 ${err ? 'border-down/60 focus:ring-down/20' : 'border-line focus:border-hood-400 focus:ring-hood-200'}`} />
+                <input id="wallet-address" value={q} onChange={(e) => { setQ(e.target.value); if (err) setErr(null); }} placeholder="Solana or 0x wallet address" spellCheck={false} autoComplete="off" className={`min-w-0 flex-1 rounded-xl border bg-paper px-4 py-3 font-mono text-sm text-ink outline-none transition placeholder:text-mut/60 focus:ring-2 ${err ? 'border-down/60 focus:ring-down/20' : 'border-line focus:border-hood-400 focus:ring-hood-200'}`} />
                 <button type="submit" className="btn-primary justify-center">Show <Arrow className="h-4 w-4" /></button>
               </div>
               {err && <p className="mt-2 text-xs text-down">{err}</p>}
@@ -58,7 +59,7 @@ export default function WalletLookup() {
           <div className="frame overflow-hidden lg:col-span-5" aria-hidden="true">
             <div className="flex items-center justify-between gap-3 border-b border-line px-5 py-3.5">
               <span className="label">Statement</span>
-              <span className="truncate font-mono text-[11px] text-mut">{EVM_ADDR.test(q.trim()) ? `${q.trim().slice(0, 6)}…${q.trim().slice(-4)}` : '0x your wallet'}</span>
+              <span className="truncate font-mono text-[11px] text-mut">{isAnyAddress(q.trim()) ? `${q.trim().slice(0, 6)}…${q.trim().slice(-4)}` : '0x your wallet'}</span>
             </div>
             <div className="divide-y divide-line">
               {FORM_LINES.map((t, i) => {
