@@ -34,9 +34,9 @@ export default function Navigation() {
   const more = [...MORE, ...(TOKEN_CA ? [[`${TOKEN} live`, `/${TOKEN_CA}`, 'The project token, routed by its own product'], ['Lottery', '/lottery', 'One holder wins a share of the fees, every day']] : [])];
 
   return (
-    <nav className="sticky top-0 z-40 border-b border-line bg-ground/85 backdrop-blur-md">
+    <nav className="sticky top-0 z-40 border-b border-white/5 bg-ground/70 backdrop-blur-xl">
       <div className="mx-auto flex h-16 max-w-6xl items-center gap-6 px-5">
-        <Link href="/" className="flex shrink-0 items-center" aria-label={`${BRAND} home`}><Logo mark="h-11 w-11" text="text-xl" /></Link>
+        <Link href="/" className="flex shrink-0 items-center" aria-label={`${BRAND} home`}><Logo mark="h-10 w-10" text="text-[17px]" /></Link>
 
         <div className="hidden items-center gap-0.5 md:flex">
           {MAIN.map(([label, href]) => <Link key={href} href={href} className={link}>{label}</Link>)}
@@ -65,6 +65,7 @@ export default function Navigation() {
         </div>
 
         <div className="ml-auto flex items-center gap-1">
+          <span className="mr-2 hidden items-center gap-1.5 rounded-full border border-white/10 bg-white/5 px-3 py-1.5 font-mono text-[11px] text-mut xl:inline-flex">◎ Solana · RH</span>
           <CopyCA className="mr-2 hidden xl:inline-flex" />
           {X_URL && <a href={X_URL} target="_blank" rel="noopener noreferrer" aria-label={`${BRAND} on X`} className="hidden h-8 w-8 items-center justify-center rounded-lg text-mut transition-colors hover:text-ink sm:flex"><X className="h-[15px] w-[15px]" /></a>}
           {COMMUNITY_URL && <a href={COMMUNITY_URL} target="_blank" rel="noopener noreferrer" aria-label={`${BRAND} community on Telegram`} className="hidden h-8 w-8 items-center justify-center rounded-lg text-mut transition-colors hover:text-ink sm:flex"><Telegram className="h-4 w-4" /></a>}

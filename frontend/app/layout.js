@@ -1,12 +1,11 @@
 import './globals.css'
-import { Funnel_Display, Funnel_Sans, Geist_Mono } from 'next/font/google'
+import { Geist, Geist_Mono } from 'next/font/google'
 import Backdrop from '../components/Backdrop'
 import { BRAND, SITE_URL, X_URL, GITHUB_URL } from '../lib/brand'
 import { pageMeta, HOME_DESCRIPTION } from '../lib/meta'
 
-// Funnel is one family in two cuts: Display for headings and figures, Sans for reading.
-const display = Funnel_Display({ subsets: ['latin'], variable: '--font-display' })
-const sans = Funnel_Sans({ subsets: ['latin'], variable: '--font-sans' })
+// Geist for everything that is read, Geist Mono for addresses and figures.
+const sans = Geist({ subsets: ['latin'], variable: '--font-sans' })
 const mono = Geist_Mono({ subsets: ['latin'], variable: '--font-mono' })
 
 export const metadata = {
@@ -38,7 +37,7 @@ const STRUCTURED = {
 
 export default function RootLayout({ children }) {
   return (
-    <html lang="en" className={`${display.variable} ${sans.variable} ${mono.variable}`}>
+    <html lang="en" className={`${sans.variable} ${mono.variable}`}>
       <body className={sans.className}>
         <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(STRUCTURED).replace(/</g, '\\u003c') }} />
         <Backdrop />

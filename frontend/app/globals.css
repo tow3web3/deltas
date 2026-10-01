@@ -2,60 +2,72 @@
 @tailwind components;
 @tailwind utilities;
 
+/* The ground: deep navy-black, lit by the logo's glow from the top left and a
+   faint violet from the bottom right. The light is fixed, the page scrolls under it. */
 body {
   @apply min-h-screen bg-ground text-ink antialiased;
-  background-image: radial-gradient(1000px circle at 50% -20%, rgba(47, 168, 255, 0.09), transparent 60%);
+  background-image:
+    radial-gradient(720px circle at -5% -10%, rgba(47, 168, 255, 0.26), transparent 60%),
+    radial-gradient(760px circle at 105% 110%, rgba(123, 92, 255, 0.2), transparent 60%);
   background-attachment: fixed;
   color-scheme: dark;
 }
 
 @layer components {
+  /* Glass: translucent, blurred, a faint sheen from the top left. */
   .panel {
-    @apply rounded-2xl border border-line bg-paper;
-    background-image: linear-gradient(180deg, rgba(255, 255, 255, 0.028), rgba(255, 255, 255, 0) 38%);
+    @apply relative rounded-2xl border;
+    background: rgba(255, 255, 255, 0.035);
+    border-color: rgba(255, 255, 255, 0.08);
+    background-image: linear-gradient(135deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0) 45%);
+    backdrop-filter: blur(18px);
+    -webkit-backdrop-filter: blur(18px);
   }
-  /* The frame of the site: a hairline box with two registration marks, top left
-     and bottom right, like the corners of a printed form. */
+  /* The frame of the site: a glass panel with one lit edge, on the side the light comes from. */
   .frame {
-    @apply relative rounded-2xl border border-line bg-paper;
-    background-image: linear-gradient(180deg, rgba(255, 255, 255, 0.028), rgba(255, 255, 255, 0) 38%);
+    @apply relative rounded-2xl border;
+    background: rgba(255, 255, 255, 0.035);
+    border-color: rgba(255, 255, 255, 0.08);
+    border-left-color: rgba(95, 227, 255, 0.55);
+    background-image: linear-gradient(135deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0) 45%);
+    backdrop-filter: blur(18px);
+    -webkit-backdrop-filter: blur(18px);
   }
-  .frame::before,
-  .frame::after {
-    content: '';
-    position: absolute;
-    width: 9px;
-    height: 9px;
-    pointer-events: none;
-    border-color: #2FA8FF;
-    border-style: solid;
-    opacity: 0.85;
-  }
-  .frame::before { top: -1px; left: -1px; border-width: 1px 0 0 1px; border-top-left-radius: 10px; }
-  .frame::after { bottom: -1px; right: -1px; border-width: 0 1px 1px 0; border-bottom-right-radius: 10px; }
+  .frame-top { border-left-color: rgba(255, 255, 255, 0.08); border-top-color: rgba(95, 227, 255, 0.55); }
+  /* The accent as the logo makes it: blue sliding into violet. */
+  .beam { background-image: linear-gradient(90deg, #2FA8FF 0%, #5FE3FF 45%, #7B5CFF 100%); }
+  .text-beam { background-image: linear-gradient(90deg, #2FA8FF 0%, #5FE3FF 45%, #7B5CFF 100%); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  /* The diagonal cut of the logo, as a divider between sections. */
+  .cut { height: 1px; background: linear-gradient(90deg, transparent, rgba(95, 227, 255, 0.6) 30%, rgba(123, 92, 255, 0.6) 70%, transparent); transform: skewY(-2deg); }
   /* Small caps label set in mono: the voice of every caption on the site. */
   .label {
-    @apply font-mono text-[10.5px] font-medium uppercase tracking-[0.14em] text-mut;
+    @apply font-mono text-[10.5px] font-medium uppercase tracking-[0.2em] text-dim;
   }
   .panel-glow {
-    @apply rounded-2xl border border-hood-200 bg-paper shadow-glow;
+    @apply rounded-2xl border border-hood-300 shadow-glow;
+    background: rgba(255, 255, 255, 0.04);
+    backdrop-filter: blur(18px);
   }
   .panel-gold {
     @apply rounded-2xl border border-gold-200 bg-paper shadow-gold;
   }
   .panel-ink {
-    @apply rounded-2xl border border-line bg-slab text-white;
+    @apply rounded-2xl border border-line text-white;
+    background: rgba(255, 255, 255, 0.05);
+    backdrop-filter: blur(18px);
   }
 
   /* Primary CTA: solid route green, dark text */
   .btn-primary {
-    @apply inline-flex items-center justify-center gap-2 rounded-xl bg-hood-500 px-5 py-2.5
-           text-sm font-bold text-coal;
-    transition: background-color 0.18s ease, transform 0.12s ease, box-shadow 0.18s ease;
+    @apply inline-flex items-center justify-center gap-2 rounded-full px-5 py-2.5 text-sm font-semibold text-coal;
+    background-image: linear-gradient(90deg, #2FA8FF 0%, #5FE3FF 45%, #7B5CFF 100%);
+    box-shadow: 0 0 30px rgba(47, 168, 255, 0.3);
+    transition: filter 0.18s ease, transform 0.12s ease, box-shadow 0.18s ease;
   }
   .btn-primary:hover {
-    @apply -translate-y-px bg-hood-400;
-    box-shadow: 0 8px 24px rgba(47, 168, 255, 0.3);
+    @apply -translate-y-px;
+    filter: brightness(1.08);
+    box-shadow: 0 0 44px rgba(47, 168, 255, 0.45);
   }
   .btn-primary:active {
     @apply translate-y-0;
@@ -65,9 +77,11 @@ body {
   }
 
   .btn-ghost {
-    @apply inline-flex items-center justify-center gap-2 rounded-xl border border-line bg-paper
-           px-5 py-2.5 text-sm font-semibold text-ink;
-    transition: border-color 0.18s ease, color 0.18s ease, transform 0.12s ease;
+    @apply inline-flex items-center justify-center gap-2 rounded-full border px-5 py-2.5 text-sm font-semibold text-ink;
+    background: rgba(255, 255, 255, 0.04);
+    border-color: rgba(255, 255, 255, 0.1);
+    backdrop-filter: blur(12px);
+    transition: border-color 0.18s ease, color 0.18s ease, transform 0.12s ease, background-color 0.18s ease;
   }
   .btn-ghost:hover {
     @apply -translate-y-px border-hood-400 text-hood-700;
@@ -75,7 +89,7 @@ body {
 
   /* Secondary CTA: white pill, the loudest thing after the accent */
   .btn-ink {
-    @apply inline-flex items-center justify-center gap-2 rounded-xl bg-ink px-5 py-2.5 text-sm font-bold text-coal;
+    @apply inline-flex items-center justify-center gap-2 rounded-full bg-ink px-5 py-2.5 text-sm font-semibold text-coal;
     transition: transform 0.12s ease, background-color 0.18s ease;
   }
   .btn-ink:hover {
@@ -83,7 +97,7 @@ body {
   }
 
   .chip {
-    @apply inline-flex items-center gap-2 rounded-full border border-line bg-paper px-3 py-1 text-xs font-medium text-mut;
+    @apply inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs font-medium text-mut;
   }
   .chip-gold {
     @apply inline-flex items-center gap-2 rounded-full border border-gold-300 bg-gold-50 px-3 py-1 text-xs font-bold text-gold-700;
@@ -94,9 +108,11 @@ body {
   }
   .eyebrow::before {
     content: '';
-    width: 14px;
-    height: 1px;
+    width: 6px;
+    height: 6px;
+    border-radius: 999px;
     background: currentColor;
+    box-shadow: 0 0 10px currentColor;
   }
 
   /* Figures: the display face with tabular digits, so numbers line up without looking like code */

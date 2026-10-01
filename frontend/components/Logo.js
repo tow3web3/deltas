@@ -11,7 +11,7 @@ export function Mark({ className = 'h-10 w-10' }) {
 
 export function Wordmark({ className = 'text-lg' }) {
   return (
-    <span className={`whitespace-nowrap font-display font-semibold tracking-tight text-ink ${className}`}>
+    <span className={`whitespace-nowrap font-display font-medium tracking-[-0.01em] text-ink ${className}`}>
       DELTA
     </span>
   );

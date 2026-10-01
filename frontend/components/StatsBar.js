@@ -127,7 +127,7 @@ export default function StatsBar() {
         <Line label="Cycles run" figure={<Figure value={s.totalExecutions} start={start} />}>
           <div className="flex items-end gap-[3px]" aria-label={`${week} cycles in the last 7 days`}>
             {(lastCycles.length ? lastCycles : Array.from({ length: 14 }, () => ({ cycles: 0 }))).map((d, i) => (
-              <span key={i} className={`w-[5px] rounded-[1px] ${d.cycles ? 'bg-gold-400' : 'bg-line'}`} style={{ height: d.cycles ? 8 + Math.min(14, d.cycles * 2) : 6 }} />
+              <span key={i} className={`w-[5px] rounded-[1px] ${d.cycles ? 'beam' : 'bg-line'}`} style={{ height: d.cycles ? 8 + Math.min(14, d.cycles * 2) : 6 }} />
             ))}
             <span className="ml-2 text-xs text-mut"><span className="figure text-ink">{week}</span> this week</span>
           </div>

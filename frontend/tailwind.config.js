@@ -1,5 +1,5 @@
 /** @type {import('tailwindcss').Config} */
-// ROUTEPAY is dark only. The scales below are written for a near-black ground:
+// DELTA is dark only: a deep navy-black ground lit by the logo's blue glow. The scales below are written for that ground:
 // 50 to 300 are deep tints (fills and borders), 400/500 are the solid accent,
 // 600 to 900 get lighter so they read as text on the tints.
 module.exports = {
@@ -11,7 +11,7 @@ module.exports = {
   theme: {
     extend: {
       colors: {
-        // Route green (#2FA8FF): money moving.
+        // The glow of the logo (#2FA8FF): money moving.
         hood: {
           50: '#0A1220',
           100: '#0D1A2E',
@@ -39,30 +39,36 @@ module.exports = {
         red: { 50: '#1F0C0C', 100: '#2E1010', 200: '#4D1A1A', 300: '#6E2424', 600: '#FF7A7A', 700: '#FF9494' },
         pink: { 100: '#2B0F1D', 200: '#4A1A32', 600: '#FF7DB4', 700: '#FF9CC6' },
         // Negative move colour.
+        // The violet end of the glow, for gradients and the rare second accent.
+        violet: { 300: '#2A2460', 500: '#7B5CFF', 700: '#A996FF' },
+        cyan: { 500: '#5FE3FF' },
         down: '#FF5C33',
-        ink: '#F4F5F4',
-        mut: '#8A9099',
-        line: '#24272B',
-        paper: '#101112',
-        ground: '#0A0A0A',
-        tile: '#191B1D',
-        // Raised dark panel (what used to be the inverted ink panel) and text on a solid accent.
-        slab: '#15171A',
-        coal: '#0A0A0A',
-        tape: '#050505',
+        ink: '#F3F5F9',
+        mut: '#8A93A6',
+        dim: '#5A6275',
+        line: '#1B2232',
+        paper: '#0B0F17',
+        ground: '#05070C',
+        tile: '#111726',
+        // Raised dark panel and text on a solid accent.
+        slab: '#0E131D',
+        coal: '#05070C',
+        tape: '#030508',
       },
       fontFamily: {
         sans: ['var(--font-sans)', 'system-ui', 'sans-serif'],
-        display: ['var(--font-display)', 'var(--font-sans)', 'system-ui', 'sans-serif'],
+        display: ['var(--font-sans)', 'system-ui', 'sans-serif'],
         mono: ['var(--font-mono)', 'ui-monospace', 'SFMono-Regular', 'Menlo', 'monospace'],
       },
       // Tighter corners and calmer weights than the Tailwind defaults: frames read as
       // instruments, not bubbles, and a heading never shouts.
-      borderRadius: { xl: '8px', '2xl': '10px', '3xl': '14px' },
+      // Glass is round: softer corners than an instrument panel.
+      borderRadius: { xl: '14px', '2xl': '20px', '3xl': '26px' },
       fontWeight: { bold: '600', extrabold: '620' },
       boxShadow: {
-        soft: '0 1px 0 rgba(255, 255, 255, 0.03) inset, 0 12px 32px rgba(0, 0, 0, 0.45)',
-        glow: '0 0 0 1px rgba(47, 168, 255, 0.35), 0 12px 40px rgba(47, 168, 255, 0.12)',
+        soft: '0 1px 0 rgba(255, 255, 255, 0.04) inset, 0 20px 50px rgba(0, 0, 0, 0.5)',
+        glow: '0 0 0 1px rgba(95, 227, 255, 0.35), 0 12px 50px rgba(47, 168, 255, 0.18)',
+        beam: '0 0 40px rgba(47, 168, 255, 0.35)',
         gold: '0 0 0 1px rgba(233, 179, 42, 0.25), 0 12px 40px rgba(233, 179, 42, 0.1)',
       },
       keyframes: {
