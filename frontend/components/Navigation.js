@@ -3,17 +3,18 @@
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { AnimatePresence, motion } from 'motion/react';
-import { Arrow, X, Github } from './Icons';
+import { Arrow, X, Github, Route, Receipt, Search, Code, Live } from './Icons';
 import Logo from './Logo';
 import CopyCA from './CopyCA';
 import { BRAND, X_URL, COMMUNITY_URL, GITHUB_URL, BOT_URL, BOT_USERNAME, TOKEN, TOKEN_CA, TOKEN_ON_EVM } from '../lib/brand';
 
-const MAIN = [['Pages', '/pages'], ['Claim', '/claim'], ['Guide', '/guide'], ['Stocks', '/stocks']];
+const MAIN = [['Pages', '/pages'], ['Claim', '/claim'], ['Guide', '/guide']];
+// [label, href, note, icon]
 const MORE = [
-  ['How it works', '/#how', 'The route, from fees in to every payout'],
-  ['My payouts', '/wallet', 'What a wallet received, as a statement'],
-  ['Token check', '/#check', 'Does a coin route its fees here'],
-  ['API', '/#developers', 'Public endpoints and webhooks'],
+  ['How it works', '/#how', 'The route, from fees in to every payout', Route],
+  ['My payouts', '/wallet', 'What a wallet received, as a statement', Receipt],
+  ['Token check', '/#check', 'Does a coin route its fees here', Search],
+  ['API', '/#developers', 'Public endpoints and webhooks', Code],
 ];
 const link = 'whitespace-nowrap rounded-lg px-2.5 py-1.5 text-[13px] font-medium text-mut transition-colors hover:text-ink';
 
@@ -29,7 +30,7 @@ export default function Navigation() {
     document.addEventListener('keydown', close);
     return () => { document.removeEventListener('mousedown', close); document.removeEventListener('keydown', close); };
   }, [open]);
-  const more = [...MORE, ...(TOKEN_CA ? [[`${TOKEN} live`, `/${TOKEN_CA}`, 'The project token, routed by its own product']] : []), ...(TOKEN_ON_EVM ? [['Lottery', '/lottery', 'One holder wins a share of the fees, every day']] : [])];
+  const more = [...MORE, ...(TOKEN_CA ? [[`${TOKEN} live`, `/${TOKEN_CA}`, 'The project token, routed by its own product', Live]] : []), ...(TOKEN_ON_EVM ? [['Lottery', '/lottery', 'One holder wins a share of the fees, every day', Live]] : [])];
 
   return (
     <nav className="sticky top-0 z-40 border-b border-white/5 bg-ground/70 backdrop-blur-xl">
@@ -45,13 +46,26 @@ export default function Navigation() {
             </button>
             <AnimatePresence>
               {open && (
-                <motion.div initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }} transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }} className="frame absolute left-0 top-full mt-2 w-72 overflow-hidden shadow-soft">
-                  <ul className="divide-y divide-line">
-                    {more.map(([label, href, note]) => (
+                <motion.div
+                  initial={{ opacity: 0, y: -6, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: -6, scale: 0.98 }}
+                  transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
+                  className="absolute left-0 top-full z-50 mt-3 w-[22rem] origin-top-left overflow-hidden rounded-2xl border border-white/10 bg-[#0A0E16] shadow-[0_24px_60px_-12px_rgba(0,0,0,0.85),0_0_0_1px_rgba(255,255,255,0.02)]"
+                >
+                  {/* a line of light along the top edge, and a soft glow in the corner */}
+                  <span aria-hidden="true" className="beam pointer-events-none absolute inset-x-0 top-0 h-px opacity-80" />
+                  <span aria-hidden="true" className="pointer-events-none absolute -left-16 -top-16 h-40 w-40 rounded-full bg-[radial-gradient(circle,rgba(47,168,255,0.14),transparent_70%)]" />
+                  <ul className="relative p-1.5">
+                    {more.map(([label, href, note, Icon]) => (
                       <li key={href}>
-                        <Link href={href} onClick={() => setOpen(false)} className="group flex items-center justify-between gap-3 px-4 py-2.5 transition-colors hover:bg-tile/60">
-                          <span><span className="block text-[13px] font-semibold text-ink">{label}</span><span className="block text-xs text-mut">{note}</span></span>
-                          <Arrow className="h-3.5 w-3.5 shrink-0 text-mut opacity-0 transition group-hover:translate-x-0.5 group-hover:opacity-100" />
+                        <Link href={href} onClick={() => setOpen(false)} className="group flex items-center gap-3 rounded-xl px-3 py-2.5 transition-colors hover:bg-white/[0.06]">
+                          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-white/[0.04] text-mut transition-colors group-hover:border-cyan-500/40 group-hover:text-cyan-500">
+                            {Icon ? <Icon className="h-4 w-4" /> : null}
+                          </span>
+                          <span className="min-w-0 flex-1">
+                            <span className="block text-[13px] font-medium text-ink">{label}</span>
+                            <span className="block text-xs leading-snug text-mut">{note}</span>
+                          </span>
+                          <Arrow className="h-3.5 w-3.5 shrink-0 text-cyan-500 opacity-0 transition group-hover:translate-x-0.5 group-hover:opacity-100" />
                         </Link>
                       </li>
                     ))}
