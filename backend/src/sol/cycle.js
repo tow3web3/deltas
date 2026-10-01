@@ -10,10 +10,10 @@ import { calculateDistributions } from '../services/airdrop.js';
 import { sendNotification } from '../bot/telegram.js';
 import { announceSolCycle } from './announce.js';
 import { keypairFromEncrypted, solBalance, formatSol, explorerTx, generateSolWallet, encryptSolSecret, isSolAddress, pk } from './client.js';
-import { readBondingCurve, pendingCreatorFees, collectCreatorFeeInstructions, isPumpMint } from './pump.js';
-import { sendTx } from './client.js';
+import { readBondingCurve, pendingCreatorFees, collectCreatorFeeInstructions, isPumpMint, ata, tokenProgramOf } from './pump.js';
+import { sendTx, conn } from './client.js';
 import { tokenHolders } from './holders.js';
-import { paySol, paySpl, sendSol, sendSpl, burnSpl, splBalance } from './payouts.js';
+import { paySol, paySpl, sendSol, sendSpl, burnSpl, splBalance, ATA_RENT } from './payouts.js';
 import { quote, swap, prices, SOL_MINT, tokenInfo } from './jupiter.js';
 import { getXStock } from './xstocks.js';
 
@@ -126,6 +126,60 @@ async function runSolLeg({ config, keypair, lamports, leg, cycleKey }) {
   }
 }
 
+/** Which of these owners already have a token account for the mint. */
+async function hasTokenAccount(mint, owners) {
+  const programId = await tokenProgramOf(mint);
+  const keys = owners.map((o) => ata(mint, o, programId));
+  const out = [];
+  for (let i = 0; i < keys.length; i += 100) out.push(...(await conn().getMultipleAccountsInfo(keys.slice(i, i + 100))));
+  return out.map(Boolean);
+}
+
+/**
+ * Holders a past cycle could not pay (their batch failed) are owed tokens that
+ * stayed in the dev wallet. Pay them first, from that balance, before anything
+ * new is routed; the token accounts this opens are paid from the wallet's SOL.
+ */
+async function payStranded(config, keypair) {
+  const dev = keypair.publicKey.toBase58();
+  const { rows } = await db.pool.query(
+    `SELECT at.id, at.holder_address, at.airdrop_amount::text AS amount, el.reward_token_used AS mint
+     FROM airdrop_transactions at JOIN execution_logs el ON el.id = at.execution_log_id
+     WHERE el.config_id = $1 AND at.status = 'failed' AND el.reward_token_used IS NOT NULL AND el.reward_token_used <> $2
+       AND el.execution_time > NOW() - INTERVAL '14 days'
+     ORDER BY at.id LIMIT 400`, [config.id, SOL_MINT]);
+  if (!rows.length) return;
+  const byMint = new Map();
+  for (const r of rows) { if (!byMint.has(r.mint)) byMint.set(r.mint, []); byMint.get(r.mint).push(r); }
+  for (const [mint, list] of byMint) {
+    try {
+      // Decimals straight from the mint account; the symbol only for the log.
+      const parsed = await conn().getParsedAccountInfo(pk(mint), 'confirmed');
+      const decimals = parsed?.value?.data?.parsed?.info?.decimals;
+      if (decimals == null) throw new Error('mint not readable');
+      const asset = { decimals, symbol: (await describeSolAsset(mint).catch(() => null))?.symbol || `${mint.slice(0, 4)}…` };
+      let tokens = await splBalance(mint, dev);
+      const has = await hasTokenAccount(mint, list.map((r) => r.holder_address));
+      // SOL for the accounts to open: what the wallet holds above half the gas reserve.
+      let sol = (await solBalance(dev)) - GAS_RESERVE / 2n;
+      const pay = [];
+      list.forEach((r, i) => {
+        const amount = BigInt(r.amount);
+        const cost = has[i] ? 10_000n : ATA_RENT + 10_000n;
+        if (amount <= 0n || amount > tokens || cost > sol) return;
+        tokens -= amount; sol -= cost;
+        pay.push({ id: r.id, address: r.holder_address, amount, holderBalance: 0n });
+      });
+      if (!pay.length) { console.log(`   ${list.length} holders still owed ${asset.symbol}: not enough ${asset.symbol} or SOL in the dev wallet yet`); continue; }
+      console.log(`   Paying ${pay.length} holders the ${asset.symbol} a past cycle owed them`);
+      const res = await paySpl(keypair, mint, asset.decimals, pay);
+      for (const t of res.successful) await db.pool.query("UPDATE airdrop_transactions SET status = 'success', tx_hash = $2 WHERE id = $1", [t.id, t.hash]);
+    } catch (e) {
+      console.log(`   Owed ${mint.slice(0, 6)}… payouts not sent: ${e.message.slice(0, 160)}`);
+    }
+  }
+}
+
 export async function executeSolConfig(config, { force = false } = {}) {
   if (running.has(config.id)) { console.log(`Config ${config.id} is still running, skipping`); return; }
   running.add(config.id);
@@ -158,6 +212,9 @@ export async function executeSolConfig(config, { force = false } = {}) {
         }
       } else console.log(`   note: ${formatSol(pending.total)} SOL pending, nothing to collect`);
     } else console.log('   note: not a pump.fun coin, the dev wallet balance is what gets routed');
+
+    // 1b. Holders a past cycle could not pay come first.
+    await payStranded(config, keypair).catch((e) => console.log(`   Owed payouts skipped: ${e.message.slice(0, 160)}`));
 
     // 2. What is payable: everything above the gas reserve.
     const balance = await solBalance(dev);
@@ -209,19 +266,6 @@ export async function executeSolConfig(config, { force = false } = {}) {
     }
     // In SOL unless the holders leg (or the fixed reward) names another asset.
     let reward = await describeSolAsset(holdersLeg?.asset || (config.reward_mode === 'fixed' && config.target_token_address && !/^0x/.test(config.target_token_address) ? config.target_token_address : null));
-    let toDistribute = holdersAmount;
-    if (!reward.isNative) {
-      try {
-        console.log(`   Buying ${reward.symbol} with ${formatSol(holdersAmount)} SOL`);
-        const bought = await buyWithSol({ keypair, mint: reward.address, lamports: holdersAmount, decimals: reward.decimals });
-        log.swapTx = bought.signature; log.boughtTokenAmount = bought.outAmount; toDistribute = bought.outAmount;
-      } catch (e) {
-        console.log(`   Swap skipped: ${e.message.slice(0, 120)}. Paying SOL instead.`);
-        note(log, `Paid SOL: ${e.message.slice(0, 120)}`);
-        reward = await describeSolAsset(null);
-      }
-    }
-    log.rewardTokenUsed = reward.address;
     const raw = await tokenHolders(mint, { exclude: [dev, config.treasury_address, config.creator_address].filter(Boolean), minBalance: BigInt(config.min_holder_amount || 0) });
     const holders = raw.map((h) => ({ address: h.owner, balance: h.balance, weight: h.balance, multiplierBps: 10000 }));
     log.holderCount = holders.length;
@@ -232,12 +276,49 @@ export async function executeSolConfig(config, { force = false } = {}) {
       await db.updateLastExecution(config.id);
       return;
     }
+    let toDistribute = holdersAmount;
+    let swapped = holdersAmount;
+    if (!reward.isNative) {
+      // A holder paid in a token needs a token account; opening one costs ~0.002 SOL, paid
+      // by the dev wallet. Count the holders who need one (and whose share is worth it) and
+      // keep that SOL out of the swap, so every batch can open its accounts.
+      try {
+        const provisional = calculateDistributions(holders, holdersAmount, 1n);
+        const has = await hasTokenAccount(reward.address, provisional.map((d) => d.address));
+        const opening = provisional.filter((d, i) => !has[i] && BigInt(d.amount) >= ATA_RENT).length;
+        const reserve = BigInt(opening) * (ATA_RENT + 10_000n);
+        if (reserve * 2n > holdersAmount) {
+          console.log(`   ${opening} holders would need a new ${reward.symbol} account: paying SOL this cycle`);
+          note(log, `Paid SOL: ${opening} holders have no ${reward.symbol} account yet and their shares are too small to open one`);
+          reward = await describeSolAsset(null);
+        } else {
+          swapped = holdersAmount - reserve;
+          if (opening) console.log(`   ${formatSol(reserve)} SOL kept to open ${opening} ${reward.symbol} accounts`);
+        }
+      } catch (e) {
+        console.log(`   Could not count token accounts (${e.message.slice(0, 80)}): paying SOL this cycle`);
+        reward = await describeSolAsset(null);
+      }
+    }
+    if (!reward.isNative) {
+      try {
+        console.log(`   Buying ${reward.symbol} with ${formatSol(swapped)} SOL`);
+        const bought = await buyWithSol({ keypair, mint: reward.address, lamports: swapped, decimals: reward.decimals });
+        log.swapTx = bought.signature; log.boughtTokenAmount = bought.outAmount; toDistribute = bought.outAmount;
+      } catch (e) {
+        console.log(`   Swap skipped: ${e.message.slice(0, 120)}. Paying SOL instead.`);
+        note(log, `Paid SOL: ${e.message.slice(0, 120)}`);
+        reward = await describeSolAsset(null);
+        swapped = holdersAmount;
+      }
+    }
+    log.rewardTokenUsed = reward.address;
     const distributions = calculateDistributions(holders, toDistribute, 1n);
     console.log(`   Paying ${distributions.length} holders in ${reward.symbol}`);
     let results;
     if (reward.isNative) results = await paySol(keypair, distributions);
     else {
-      const lamportsPerRaw = holdersAmount > 0n && toDistribute > 0n ? holdersAmount / toDistribute : null; // how much SOL one raw unit was worth
+      const lamportsPerRaw = swapped > 0n && toDistribute > 0n ? swapped / toDistribute : null; // how much SOL one raw unit was worth
       results = await paySpl(keypair, reward.address, reward.decimals, distributions, { lamportsPerRaw });
       if (results.skipped?.length) note(log, `${results.skipped.length} holders skipped: share below the cost of a token account`);
     }
@@ -273,4 +354,4 @@ async function notifyUser(userId, message) {
   } catch (e) { console.error('Error notifying user:', e.message); }
 }
 
-export { splBalance, pk };
+export { splBalance, pk, payStranded as payStrandedForTests };

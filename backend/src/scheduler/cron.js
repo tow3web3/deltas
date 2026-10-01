@@ -53,7 +53,18 @@ export function scheduleConfig(config) {
   console.log(`   Scheduling config ${configId}: ${expression}${timezone ? ` (${timezone})` : ''}`);
   const job = cron.schedule(expression, async () => {
     try {
-      await executeBotConfig(config);
+      // Read the config fresh: a manual run or an edit since it was scheduled must count.
+      const { rows: [fresh] } = await db.pool.query('SELECT * FROM bot_configs WHERE id = $1', [configId]);
+      if (!fresh || !fresh.is_active) return;
+      if ((fresh.schedule_kind || 'interval') === 'interval' && fresh.last_execution) {
+        const since = Date.now() - new Date(fresh.last_execution).getTime();
+        const period = Number(fresh.interval_minutes || 5) * 60_000;
+        if (since < period - 60_000) {
+          console.log(`   Config ${configId}: last cycle ${Math.round(since / 1000)}s ago, waiting for the full ${fresh.interval_minutes} min`);
+          return;
+        }
+      }
+      await executeBotConfig(fresh);
     } catch (error) {
       console.error(`Error executing config ${configId}:`, error);
     }
