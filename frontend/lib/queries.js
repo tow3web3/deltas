@@ -1,4 +1,7 @@
 import { getSql } from './db';
+import { HIDDEN_TOKENS } from './listing';
+
+// Public lists leave out the coins in HIDDEN_TOKENS (see listing.js).
 
 // Shared read-only queries used by the site routes and the public /api/v1.
 
@@ -12,12 +15,12 @@ export async function getGlobalStats() {
   const sql = getSql();
   const [[u], [c], [e], [s]] = await Promise.all([
     sql`SELECT COUNT(*)::int AS count FROM users`,
-    sql`SELECT COUNT(*)::int AS count FROM bot_configs WHERE is_active = true`,
-    sql`SELECT COUNT(*)::int AS count FROM execution_logs WHERE status = 'success' AND holder_count > 0`,
+    sql`SELECT COUNT(*)::int AS count FROM bot_configs WHERE is_active = true AND NOT (source_token_address = ANY(${HIDDEN_TOKENS}::text[]))`,
+    sql`SELECT COUNT(*)::int AS count FROM execution_logs WHERE status = 'success' AND holder_count > 0 AND config_id NOT IN (SELECT id FROM bot_configs WHERE source_token_address = ANY(${HIDDEN_TOKENS}::text[]))`,
     // claimed_eth_wei holds the chain's own unit: wei on Robinhood Chain, lamports on Solana.
     sql`SELECT COALESCE(SUM(claimed_eth_wei) FILTER (WHERE COALESCE(chain, 'robinhood') <> 'solana'), 0)::text AS sum,
                COALESCE(SUM(claimed_eth_wei) FILTER (WHERE chain = 'solana'), 0)::text AS lamports
-        FROM execution_logs WHERE status = 'success' AND holder_count > 0`,
+        FROM execution_logs WHERE status = 'success' AND holder_count > 0 AND config_id NOT IN (SELECT id FROM bot_configs WHERE source_token_address = ANY(${HIDDEN_TOKENS}::text[]))`,
   ]);
   return { totalUsers: u.count, activeConfigs: c.count, totalExecutions: e.count, totalEthClaimedWei: s.sum, totalSolClaimedLamports: s.lamports };
 }
@@ -32,6 +35,7 @@ export async function getDailyRouted(days = 30) {
            COUNT(el.id)::int AS cycles
     FROM generate_series((NOW() - (${days - 1} * INTERVAL '1 day'))::date, NOW()::date, INTERVAL '1 day') d
     LEFT JOIN execution_logs el ON el.execution_time::date = d::date AND el.status = 'success'
+      AND el.config_id NOT IN (SELECT id FROM bot_configs WHERE source_token_address = ANY(${HIDDEN_TOKENS}::text[]))
     GROUP BY d ORDER BY d`;
 }
 
@@ -45,13 +49,14 @@ export async function getActivity(limit = 20) {
              el.holder_count, el.total_airdropped::text AS total_airdropped, el.claimed_eth_wei::text AS claimed_eth_wei,
              el.execution_time AS ts
       FROM execution_logs el JOIN bot_configs bc ON el.config_id = bc.id
-      WHERE el.status = 'success' AND el.holder_count > 0
+      WHERE el.status = 'success' AND el.holder_count > 0 AND NOT (bc.source_token_address = ANY(${HIDDEN_TOKENS}::text[]))
     )
     UNION ALL
     (
       SELECT 'linked' AS type, bc.source_token_address, bc.target_token_address,
              NULL::int, NULL::text, NULL::text, bc.created_at
       FROM bot_configs bc
+      WHERE NOT (bc.source_token_address = ANY(${HIDDEN_TOKENS}::text[]))
     )
     ORDER BY ts DESC
     LIMIT ${limit}
@@ -68,7 +73,7 @@ export async function getActiveTokens() {
            bc.treasury_address, bc.creator_address, bc.payout_mode, bc.loyalty_enabled, bc.loyalty_max_bps, bc.loyalty_ramp_days,
            COALESCE((SELECT COUNT(*) FROM execution_logs el WHERE el.config_id = bc.id AND el.status = 'success' AND el.holder_count > 0), 0)::int AS distributions
     FROM bot_configs bc
-    WHERE bc.is_active = true
+    WHERE bc.is_active = true AND NOT (bc.source_token_address = ANY(${HIDDEN_TOKENS}::text[]))
     ORDER BY bc.created_at DESC
     LIMIT 50
   `;
@@ -98,7 +103,7 @@ export async function getYieldInputs(address = null) {
                COUNT(*) FILTER (WHERE el.execution_time > NOW() - INTERVAL '30 days')::int AS cycles_30d,
                MIN(el.execution_time) AS first_at
         FROM bot_configs bc JOIN execution_logs el ON el.config_id = bc.id
-        WHERE bc.is_active = true AND el.status = 'success' AND (el.holder_count > 0 OR el.burn_amount > 0 OR el.treasury_amount > 0)
+        WHERE bc.is_active = true AND NOT (bc.source_token_address = ANY(${HIDDEN_TOKENS}::text[])) AND el.status = 'success' AND (el.holder_count > 0 OR el.burn_amount > 0 OR el.treasury_amount > 0)
         GROUP BY bc.source_token_address`;
   return rows;
 }
