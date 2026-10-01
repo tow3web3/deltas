@@ -28,8 +28,8 @@ const GROUPS = [
       { title: 'Pay-through in kind', scene: 'inkind', tag: 'Core', body: 'What pump.fun pays is what holders receive: SOL fees become SOL dividends. No swap, no slippage, about 18 holders paid per transaction. On Robinhood Chain, NVDA fees become NVDA dividends.' },
       { title: 'Convert to a stock', scene: 'convert', body: `Rather pay a stock? Each cycle the holders' SOL is swapped on Jupiter into the xStock you pick: NVDAx, SPYx, GLDx, or any of the ${PAYABLE} Jupiter verifies.` },
       { title: 'Any token, by mint', scene: 'anytoken', body: 'Holders do not have to be paid in a stock. Paste any mint on Solana and they are paid in it, swapped on Jupiter every cycle: a partner coin, your ecosystem token, a cross-promo.' },
-      { title: 'Roulette, Top Gainer, Portfolio', scene: 'reel', body: 'Let the reward change every cycle: a random liquid stock, the best stock of the day, or a basket in rotation (Magnificent 7, AI and Semis, Degen Street, Safe Haven).' },
-      { title: 'Community vote', scene: 'vote', body: 'Holders vote on the next reward, weighted by their balance and their loyalty. Gasless: one signature.' },
+      { title: 'Roulette, Top Gainer, Portfolio', scene: 'reel', tag: 'Robinhood Chain', body: 'Let the reward change every cycle: a random liquid stock, the best stock of the day, or a basket in rotation (Magnificent 7, AI and Semis, Degen Street, Safe Haven). On Robinhood Chain for now; on Solana a coin pays SOL or the asset it picks.' },
+      { title: 'Community vote', scene: 'vote', tag: 'Robinhood Chain', body: 'Holders vote on the next reward, weighted by their balance and their loyalty. Gasless: one signature. On Robinhood Chain for now.' },
     ],
   },
   {
@@ -37,7 +37,7 @@ const GROUPS = [
     items: [
       { title: 'Closing bell', scene: 'bell', body: 'Pay once a day at 4:00 pm New York time, on weekdays only. A real dividend calendar.' },
       { title: 'Market hours only', scene: 'hours', body: 'Or run every 1, 2, 5, 10, 30 or 60 minutes, and skip the cycles while Wall Street is closed.' },
-      { title: 'Record date and loyalty', scene: 'loyalty', body: 'Weight ramps from 1x to 2x over 30 days of holding, with a minimum hold to qualify, and selling resets the clock. Snipers earn less than diamond hands.' },
+      { title: 'Record date and loyalty', scene: 'loyalty', tag: 'Robinhood Chain', body: 'Weight ramps from 1x to 2x over 30 days of holding, with a minimum hold to qualify, and selling resets the clock. Snipers earn less than diamond hands. On Robinhood Chain for now; on Solana holders are paid by balance.' },
     ],
   },
   {

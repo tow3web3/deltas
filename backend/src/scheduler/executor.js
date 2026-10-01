@@ -46,8 +46,14 @@ function newLog(config, cycleKey) {
 const note = (log, msg) => { log.errorMessage = [log.errorMessage, msg].filter(Boolean).join('; '); };
 
 export async function executeBotConfig(config, { force = false } = {}) {
-  // Each chain has its own cycle; this file is the EVM one.
-  if ((config.chain || 'robinhood') === 'solana') return executeSolConfig(config, { force });
+  // Each chain has its own cycle; this file is the EVM one. "Market hours only" holds on both.
+  if ((config.chain || 'robinhood') === 'solana') {
+    if (config.market_hours_only && !force && !isMarketOpen()) {
+      console.log(`Solana cycle for ${short(config.source_token_address)} skipped: market closed (market hours only)`);
+      return;
+    }
+    return executeSolConfig(config, { force });
+  }
   if (runningConfigs.has(config.id)) {
     console.log(`Config ${config.id} is still running from a previous tick, skipping`);
     return;
