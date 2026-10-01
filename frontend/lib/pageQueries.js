@@ -7,7 +7,7 @@ import crypto from 'crypto';
 import { PLATFORMS, normalizeHandle, maskPhone } from './pages';
 
 const lc = (a) => (a ? String(a).toLowerCase() : null);
-const PUBLIC = 'id, platform, handle, slug, external_id, display_name, avatar_url, vault_address, claimed_wallet, claimed_at, sweep_pending, last_swept_at, created_at';
+const PUBLIC = 'id, platform, handle, slug, external_id, display_name, avatar_url, vault_address, sol_vault_address, claimed_wallet, sol_claimed_wallet, claimed_at, sweep_pending, last_swept_at, created_at';
 
 /** The public address of a phone page: a keyed hash of the number. Nobody can walk back from it to the number. */
 export function phoneSlug(e164) {
@@ -68,29 +68,31 @@ export async function ensurePage(platform, handle, userId = null) {
 export async function pageTotals(pageId) {
   const sql = getSql();
   const [sum] = await sql`
-    SELECT COALESCE(SUM(value_wei), 0)::text AS value_wei,
-           COALESCE(SUM(value_wei) FILTER (WHERE direct), 0)::text AS direct_wei,
+    SELECT COALESCE(SUM(value_wei) FILTER (WHERE chain <> 'solana'), 0)::text AS value_wei,
+           COALESCE(SUM(value_wei) FILTER (WHERE chain = 'solana'), 0)::text AS value_lamports,
+           COALESCE(SUM(value_wei) FILTER (WHERE direct AND chain <> 'solana'), 0)::text AS direct_wei,
+           COALESCE(SUM(value_wei) FILTER (WHERE direct AND chain = 'solana'), 0)::text AS direct_lamports,
            COUNT(*)::int AS payments,
            COUNT(DISTINCT source_token)::int AS coins,
            MIN(created_at) AS first_at, MAX(created_at) AS last_at
     FROM page_payouts WHERE page_id = ${pageId}`;
   const assets = await sql`
-    SELECT token, MAX(symbol) AS symbol, MAX(decimals)::int AS decimals, SUM(amount)::text AS amount, COALESCE(SUM(value_wei), 0)::text AS value_wei
-    FROM page_payouts WHERE page_id = ${pageId} GROUP BY token ORDER BY SUM(value_wei) DESC`;
+    SELECT token, chain, MAX(symbol) AS symbol, MAX(decimals)::int AS decimals, SUM(amount)::text AS amount, COALESCE(SUM(value_wei), 0)::text AS value_wei
+    FROM page_payouts WHERE page_id = ${pageId} GROUP BY token, chain`;
   return { ...sum, assets };
 }
 
 export async function pagePayouts(pageId, limit = 25) {
   const sql = getSql();
   return await sql`
-    SELECT id, source_token, token, symbol, decimals, amount::text AS amount, value_wei::text AS value_wei, to_address, direct, tx_hash, created_at
+    SELECT id, chain, source_token, token, symbol, decimals, amount::text AS amount, value_wei::text AS value_wei, to_address, direct, tx_hash, created_at
     FROM page_payouts WHERE page_id = ${pageId} ORDER BY created_at DESC LIMIT ${limit}`;
 }
 
 export async function pageSweeps(pageId, limit = 25) {
   const sql = getSql();
   return await sql`
-    SELECT token, symbol, decimals, amount::text AS amount, wallet, tx_hash, created_at
+    SELECT chain, token, symbol, decimals, amount::text AS amount, wallet, tx_hash, created_at
     FROM page_sweeps WHERE page_id = ${pageId} ORDER BY created_at DESC LIMIT ${limit}`;
 }
 
@@ -104,29 +106,33 @@ export async function pageSources(pageId) {
     GROUP BY bc.id ORDER BY bc.is_active DESC, SUM(l.share_bps) DESC LIMIT 50`;
 }
 
-/** The directory: pages ranked by what they received. Pages nobody routes to and nobody paid stay out. */
-export async function topPages({ limit = 24, platform = null, q = null } = {}) {
+/**
+ * The directory: pages ranked by what they received. Pages nobody routes to and nobody paid stay out.
+ * Amounts are kept per chain (wei on Robinhood Chain, lamports on Solana); `lamportWeight` is what one
+ * lamport is worth in wei today, so the ranking compares like with like.
+ */
+export async function topPages({ limit = 24, platform = null, q = null, lamportWeight = 5e7 } = {}) {
   const like = q ? `%${String(q).toLowerCase().replace(/[%_\\]/g, '')}%` : null;
   return (await query(
-    `SELECT p.id, p.platform, p.handle, p.slug, p.display_name, p.avatar_url, p.vault_address, p.claimed_wallet IS NOT NULL AS claimed, p.created_at,
-            COALESCE(t.value_wei, 0)::text AS value_wei, COALESCE(t.payments, 0)::int AS payments, t.last_at,
+    `SELECT p.id, p.platform, p.handle, p.slug, p.display_name, p.avatar_url, p.vault_address, p.sol_vault_address, (p.claimed_wallet IS NOT NULL OR p.sol_claimed_wallet IS NOT NULL) AS claimed, p.created_at,
+            COALESCE(t.value_wei, 0)::text AS value_wei, COALESCE(t.value_lamports, 0)::text AS value_lamports, COALESCE(t.payments, 0)::int AS payments, t.last_at,
             COALESCE(s.coins, 0)::int AS coins
      FROM social_pages p
-     LEFT JOIN (SELECT page_id, SUM(value_wei) AS value_wei, COUNT(*) AS payments, MAX(created_at) AS last_at FROM page_payouts GROUP BY page_id) t ON t.page_id = p.id
+     LEFT JOIN (SELECT page_id, SUM(value_wei) FILTER (WHERE chain <> 'solana') AS value_wei, SUM(value_wei) FILTER (WHERE chain = 'solana') AS value_lamports, COUNT(*) AS payments, MAX(created_at) AS last_at FROM page_payouts GROUP BY page_id) t ON t.page_id = p.id
      LEFT JOIN (SELECT l.page_id, COUNT(DISTINCT l.config_id) AS coins FROM policy_legs l JOIN bot_configs bc ON bc.id = l.config_id AND bc.legs_enabled = true WHERE l.kind = 'page' GROUP BY l.page_id) s ON s.page_id = p.id
      WHERE (COALESCE(t.payments, 0) > 0 OR COALESCE(s.coins, 0) > 0)
        AND ($1::text IS NULL OR p.platform = $1)
        AND ($2::text IS NULL OR (p.platform <> 'phone' AND p.handle LIKE $2) OR LOWER(COALESCE(p.display_name, '')) LIKE $2)
-     ORDER BY COALESCE(t.value_wei, 0) DESC, COALESCE(s.coins, 0) DESC, p.id DESC
+     ORDER BY COALESCE(t.value_wei, 0) + COALESCE(t.value_lamports, 0) * $4::numeric DESC, COALESCE(s.coins, 0) DESC, p.id DESC
      LIMIT $3`,
-    [platform && PLATFORMS[platform] ? platform : null, like, Math.min(100, Math.max(1, Number(limit) || 24))]
+    [platform && PLATFORMS[platform] ? platform : null, like, Math.min(100, Math.max(1, Number(limit) || 24)), Number(lamportWeight) > 0 ? Number(lamportWeight) : 5e7]
   )).map(scrub);
 }
 
 export async function recentPagePayouts(limit = 20) {
   const sql = getSql();
   return (await sql`
-    SELECT pp.id, pp.source_token, pp.token, pp.symbol, pp.decimals, pp.amount::text AS amount, pp.value_wei::text AS value_wei, pp.direct, pp.tx_hash, pp.created_at,
+    SELECT pp.id, pp.chain, pp.source_token, pp.token, pp.symbol, pp.decimals, pp.amount::text AS amount, pp.value_wei::text AS value_wei, pp.direct, pp.tx_hash, pp.created_at,
            p.platform, p.handle, p.slug, p.display_name, p.avatar_url
     FROM page_payouts pp JOIN social_pages p ON p.id = pp.page_id
     ORDER BY pp.created_at DESC LIMIT ${limit}`).map(scrub);
@@ -136,8 +142,9 @@ export async function pagesStats() {
   const sql = getSql();
   const [r] = await sql`
     SELECT (SELECT COUNT(*) FROM social_pages p WHERE EXISTS (SELECT 1 FROM page_payouts pp WHERE pp.page_id = p.id) OR EXISTS (SELECT 1 FROM policy_legs l WHERE l.page_id = p.id))::int AS pages,
-           (SELECT COUNT(*) FROM social_pages WHERE claimed_wallet IS NOT NULL)::int AS claimed,
-           (SELECT COALESCE(SUM(value_wei), 0) FROM page_payouts)::text AS value_wei,
+           (SELECT COUNT(*) FROM social_pages WHERE claimed_wallet IS NOT NULL OR sol_claimed_wallet IS NOT NULL)::int AS claimed,
+           (SELECT COALESCE(SUM(value_wei), 0) FROM page_payouts WHERE chain <> 'solana')::text AS value_wei,
+           (SELECT COALESCE(SUM(value_wei), 0) FROM page_payouts WHERE chain = 'solana')::text AS value_lamports,
            (SELECT COUNT(*) FROM page_payouts)::int AS payments`;
   return r;
 }

@@ -35,7 +35,7 @@ export async function POST(request) {
     if (!slug || !name) return apiJson({ error: 'slug and name required' }, 400);
     const webhookUrl = body.webhookUrl && /^https:\/\//.test(body.webhookUrl) ? String(body.webhookUrl).slice(0, 500) : null;
     const website = body.website ? String(body.website).slice(0, 200) : null;
-    const apiKey = randomKey('bmr');
+    const apiKey = randomKey('dlt');
     const webhookSecret = randomKey('whsec');
     const sql = getSql();
     const [row] = await sql`

@@ -9,6 +9,7 @@ import { solWalletAssets, SOL_MINT } from '../../../../lib/solana';
 import { getLegs } from '../../../../lib/appQueries';
 import { walletAssets } from '../../../../lib/walletAssets';
 import { BRAND } from '../../../../lib/brand';
+import { pageName, pagePath } from '../../../../lib/pages';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';

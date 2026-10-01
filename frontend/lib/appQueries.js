@@ -153,9 +153,12 @@ export async function getLegs(configId) {
   const sql = getSql();
   return await sql`
     SELECT l.id, l.kind, l.share_bps, l.address, l.asset, l.label, l.sort_order, l.pos_x, l.pos_y,
-           l.page_id, p.platform AS page_platform, p.handle AS page_handle, p.slug AS page_slug, p.vault_address AS page_vault,
-           p.display_name AS page_name, p.avatar_url AS page_avatar, (p.claimed_wallet IS NOT NULL) AS page_claimed
-    FROM policy_legs l LEFT JOIN social_pages p ON p.id = l.page_id
+           l.page_id, p.platform AS page_platform, p.handle AS page_handle, p.slug AS page_slug,
+           -- the page's vault and claim on the coin's own chain
+           CASE WHEN bc.chain = 'solana' THEN p.sol_vault_address ELSE p.vault_address END AS page_vault,
+           p.display_name AS page_name, p.avatar_url AS page_avatar,
+           (CASE WHEN bc.chain = 'solana' THEN p.sol_claimed_wallet ELSE p.claimed_wallet END IS NOT NULL) AS page_claimed
+    FROM policy_legs l JOIN bot_configs bc ON bc.id = l.config_id LEFT JOIN social_pages p ON p.id = l.page_id
     WHERE l.config_id = ${configId} ORDER BY l.sort_order, l.id`;
 }
 

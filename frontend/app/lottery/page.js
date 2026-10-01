@@ -242,7 +242,7 @@ function Lottery() {
               source={dash.sourceToken}
               devWallet={dash.devWallet}
               schedule={dash.config.scheduleLabel}
-              legs={[...(dash.legs || []), { kind: 'lottery', shareBps: 50, label: 'YOU', assetSymbol: 'ETH', dest: 'one holder wins, every 24h, forever', chip: 'in ETH', featured: true }]}
+              legs={[...(dash.legs || []), { kind: 'lottery', shareBps: 50, label: 'YOU', assetSymbol: dash.config?.native || 'SOL', dest: 'one holder wins, every 24h, forever', chip: `in ${dash.config?.native || 'SOL'}`, featured: true }]}
               split={dash.config.split}
               countdown={{ intervalMinutes: dash.config.intervalMinutes, scheduleKind: dash.config.scheduleKind, active: dash.config.isActive }}
             />

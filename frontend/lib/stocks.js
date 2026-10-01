@@ -1,6 +1,7 @@
 // Stock Token registry for the site (mirrors backend/src/chain/stocks.js).
 import { STOCK_LIST } from './stocks-data';
 import { TOKEN_CA, TOKEN_SYMBOL } from './brand';
+import { getXStock } from './xstocks';
 import { isSolAddress, explorerTx as chainTx, explorerAddress as chainAddress, explorerToken as chainToken } from './chains';
 
 const SECTOR_COLORS = {
@@ -42,6 +43,7 @@ export const BASKETS = {
 export const EVM_ADDR = /^0x[0-9a-fA-F]{40}$/;
 export const ZERO = '0x0000000000000000000000000000000000000000';
 export const isNative = (a) => !a || a.toLowerCase() === ZERO;
+export const SOL_MINT = 'So11111111111111111111111111111111111111112';
 
 export function getStock(tickerOrAddress) {
   const q = String(tickerOrAddress || '').trim();
@@ -56,8 +58,16 @@ export function getStock(tickerOrAddress) {
  */
 export function describeAddress(address, meta = null) {
   if (isNative(address)) return { symbol: 'ETH', name: 'Ether', logo: '/eth.svg', logos: ['/eth.svg'], color: '#627EEA', isStock: false, isNative: true };
+  if (address === SOL_MINT) return { symbol: 'SOL', name: 'Solana', logo: '/sol.png', logos: ['/sol.png'], color: '#9945FF', isStock: false, isNative: true };
   const s = getStock(address);
   if (s) return { symbol: s.ticker, name: s.name, logo: s.logo, logos: [s.logo], color: s.color, isStock: true, isNative: false, sector: s.sector };
+  // An xStock on Solana: the site's own stock logo first, then the issuer's.
+  const xs = isSolAddress(address) ? getXStock(address) : null;
+  if (xs && xs.mint === address) {
+    const own = getStock(xs.ticker)?.logo || null;
+    const logos = [own, xs.logo].filter(Boolean);
+    return { symbol: xs.symbol, name: xs.name, logo: logos[0], logos, color: getStock(xs.ticker)?.color || '#00C805', isStock: true, isNative: false, xstock: true };
+  }
   const short = address ? `${address.slice(2, 6).toUpperCase()}` : '????';
   const sol = isSolAddress(address);
   const valid = EVM_ADDR.test(String(address || '')) || sol;
