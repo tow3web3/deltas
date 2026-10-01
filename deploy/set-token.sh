@@ -6,7 +6,8 @@
 # What it does:
 #   1. checks the token: Jupiter for a Solana mint (a pump.fun coin), eth_call for a 0x token.
 #      Right after a launch Jupiter can lag a few minutes: a mint that exists on Solana is then
-#      taken with the symbol given as the third argument;
+#      taken with the symbol given as the third argument. PRELAUNCH=1 shows an address
+#      that is not on chain yet (a pump.fun vanity mint revealed before the launch);
 #   2. writes it into the bot's env on the VM and restarts the bot once no cycle is running;
 #   3. sets it on Vercel and redeploys the site (NEXT_PUBLIC_* values are baked in at build time).
 # The minimum hold is the holders-only gate, in the bot and on the dashboard: 0 means anyone
@@ -20,11 +21,11 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 
 if [[ "$CA" =~ ^0x[0-9a-fA-F]{40}$ ]]; then
   CHAIN="Robinhood Chain"; CA="$(echo "$CA" | tr 'A-F' 'a-f')"; RPC="https://rpc.mainnet.chain.robinhood.com"
-  call() { curl -s -X POST "$RPC" -H "Content-Type: application/json" -d "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"eth_call\",\"params\":[{\"to\":\"$CA\",\"data\":\"$1\"},\"latest\"]}" | python -c "import sys,json; print(json.load(sys.stdin).get('result',''))"; }
+  call() { curl -s -X POST "$RPC" -H "Content-Type: application/json" -d "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"eth_call\",\"params\":[{\"to\":\"$CA\",\"data\":\"$1\"},\"latest\"]}" | python -c "import sys,json; print(json.load(sys.stdin).get('result',''))" | tr -d '\r'; }
   SYMBOL="$(python -c "
 import sys; r=sys.argv[1][2:]
 b=bytes.fromhex(r) if r else b''
-print(b[64:64+int.from_bytes(b[32:64],'big')].decode(errors='ignore') if len(b)>64 else '')" "$(call 0x95d89b41)")"
+print(b[64:64+int.from_bytes(b[32:64],'big')].decode(errors='ignore') if len(b)>64 else '')" "$(call 0x95d89b41)" | tr -d '\r')"
   NAME="$SYMBOL"
 elif [[ "$CA" =~ ^[1-9A-HJ-NP-Za-km-z]{32,44}$ ]]; then
   CHAIN="Solana"
@@ -33,11 +34,13 @@ import sys, json
 mint = sys.argv[1]
 d = json.load(sys.stdin)
 t = next((x for x in (d if isinstance(d, list) else []) if x.get('id') == mint), None)
-print((t['symbol'] + ' ' + t['name']) if t else '')" "$CA")
+print((t['symbol'] + ' ' + t['name']) if t else '')" "$CA" | tr -d '\r')
   if [ -z "${SYMBOL:-}" ]; then
     # Not on Jupiter yet: is the mint on chain at all?
-    EXISTS="$(curl -s https://api.mainnet-beta.solana.com -H 'Content-Type: application/json' -d "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"getAccountInfo\",\"params\":[\"$CA\",{\"encoding\":\"base64\"}]}" | python -c "import sys,json; print('yes' if (json.load(sys.stdin).get('result') or {}).get('value') else '')")"
+    EXISTS="$(curl -s https://api.mainnet-beta.solana.com -H 'Content-Type: application/json' -d "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"getAccountInfo\",\"params\":[\"$CA\",{\"encoding\":\"base64\"}]}" | python -c "import sys,json; print('yes' if (json.load(sys.stdin).get('result') or {}).get('value') else '')" | tr -d '\r')"
     if [ -n "$EXISTS" ] && [ -n "$GIVEN_SYMBOL" ]; then SYMBOL="$GIVEN_SYMBOL"; NAME="$GIVEN_SYMBOL (not on Jupiter yet)";
+    # Reveal the address before the launch: PRELAUNCH=1 with the symbol skips the on-chain check.
+    elif [ "${PRELAUNCH:-}" = "1" ] && [ -n "$GIVEN_SYMBOL" ]; then SYMBOL="$GIVEN_SYMBOL"; NAME="$GIVEN_SYMBOL (not launched yet)";
     elif [ -n "$EXISTS" ]; then echo "The mint exists but Jupiter does not list it yet: wait a minute, or pass the symbol as the third argument."; exit 1;
     else echo "No mint at $CA on Solana yet: launch the coin first."; exit 1; fi
   fi
